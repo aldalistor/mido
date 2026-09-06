@@ -12,6 +12,7 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:create-contact', (_event, payload = {}) => db.createModernContact(payload));
   ipcMain.handle('db:modern-items', (_event, payload = {}) => db.modernItems(payload.search || ''));
   ipcMain.handle('db:create-item', (_event, payload = {}) => db.createModernItem(payload));
+  ipcMain.handle('db:create-invoice', (_event, payload = {}) => db.createModernInvoice(payload));
   ipcMain.handle('db:customers', (_event, payload = {}) => db.customers(payload.search || ''));
   ipcMain.handle('db:journal', (_event, payload = {}) => db.journal(payload.limit || 50));
   ipcMain.handle('db:create-journal', (_event, payload = {}) => db.createModernJournal(payload));
