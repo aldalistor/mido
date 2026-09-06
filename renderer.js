@@ -116,3 +116,15 @@ const originalSwitchView = switchView;
 switchView = function(view) { originalSwitchView(view); setTimeout(() => loadLiveRows(view), 0); };
 $('db-status')?.addEventListener('click', refreshDbStatus);
 window.addEventListener('DOMContentLoaded', refreshDbStatus);
+
+async function refreshDashboardMetrics() {
+  if (!window.onyxAPI?.dashboard) return;
+  try {
+    const data = await window.onyxAPI.dashboard();
+    const cards = document.querySelectorAll('.metric-card>strong');
+    if (cards[0]) cards[0].innerHTML = `${Number(data.journals || 0).toLocaleString('ar-SA')} <small>عملية</small>`;
+    if (cards[1]) cards[1].innerHTML = `${Number(data.accounts || 0).toLocaleString('ar-SA')} <small>حساب</small>`;
+    if (cards[2]) cards[2].innerHTML = `${Number(data.customers || 0).toLocaleString('ar-SA')} <small>شركة/سياق</small>`;
+  } catch (error) { console.warn('Dashboard metrics unavailable:', error.message); }
+}
+window.addEventListener('DOMContentLoaded', refreshDashboardMetrics);
