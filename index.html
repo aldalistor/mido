@@ -7,6 +7,14 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <section id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-brand"><div class="brand-mark">أ</div><div><strong>أونكس</strong><span>المحاسبي</span></div></div>
+      <h1 id="login-title">تسجيل الدخول</h1><p id="login-subtitle">أدخل بياناتك للوصول إلى النظام</p>
+      <form id="login-form"><label>اسم المستخدم<input id="login-username" autocomplete="username" required /></label><label>كلمة المرور<input id="login-password" type="password" autocomplete="current-password" required /></label><div id="setup-fields" class="setup-fields hidden"><label>الاسم الظاهر<input id="setup-display" /></label><label>تأكيد كلمة المرور<input id="setup-confirm" type="password" /></label></div><div id="login-error" class="login-error"></div><button class="primary-button login-submit" type="submit">دخول</button></form>
+      <small class="login-security">اتصال مشفر بالجلسة المحلية · كلمات المرور مملحة ومشفرة</small>
+    </div>
+  </section>
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -34,7 +42,7 @@
         <button class="nav-item" data-view="contacts"><span class="nav-icon">♙</span> العملاء والموردون</button>
       </nav>
       <div class="sidebar-bottom">
-        <button class="nav-item"><span class="nav-icon">⚙</span> الإعدادات</button>
+        <button class="nav-item" data-view="security"><span class="nav-icon">⚙</span> المستخدمون والصلاحيات</button>
         <div class="user-mini"><div class="avatar">م</div><div><strong>محمد العتيبي</strong><span>مدير النظام</span></div><span class="dots">•••</span></div>
       </div>
     </aside>

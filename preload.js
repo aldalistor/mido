@@ -14,4 +14,12 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   customers: (search = '') => ipcRenderer.invoke('db:customers', { search }),
   journal: (limit = 50) => ipcRenderer.invoke('db:journal', { limit }),
   createJournal: (payload) => ipcRenderer.invoke('db:create-journal', payload),
+  currentSession: () => ipcRenderer.invoke('auth:current'),
+  login: (payload) => ipcRenderer.invoke('auth:login', payload),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+  hasUsers: () => ipcRenderer.invoke('admin:has-users'),
+  listUsers: () => ipcRenderer.invoke('admin:list-users'),
+  listRoles: () => ipcRenderer.invoke('admin:list-roles'),
+  createUser: (payload) => ipcRenderer.invoke('admin:create-user', payload),
+  assignRole: (payload) => ipcRenderer.invoke('admin:assign-role', payload),
 });

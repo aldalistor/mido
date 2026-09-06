@@ -1,7 +1,7 @@
 const labels = {
   dashboard: 'لوحة التحكم', journal: 'القيود اليومية', accounts: 'دليل الحسابات',
   reports: 'التقارير المالية', sales: 'المبيعات', purchases: 'المشتريات',
-  inventory: 'المخزون', contacts: 'العملاء والموردون'
+  inventory: 'المخزون', contacts: 'العملاء والموردون', security: 'المستخدمون والصلاحيات'
 };
 
 const seed = {
@@ -35,7 +35,7 @@ function switchView(view) {
   target.classList.add('active-view');
   $('page-title').textContent = labels[view] || 'الوحدة';
   $('generic-title').textContent = labels[view] || 'الوحدة';
-  if (view !== 'dashboard') renderModule(view);
+  if (view === 'security') renderSecurity(); else if (view !== 'dashboard') renderModule(view);
 }
 
 function renderModule(view) {
@@ -130,3 +130,16 @@ async function refreshDashboardMetrics() {
   } catch (error) { console.warn('Dashboard metrics unavailable:', error.message); }
 }
 window.addEventListener('DOMContentLoaded', refreshDashboardMetrics);
+
+async function renderSecurity() {
+  $('generic-content').innerHTML = '<div class="module-toolbar"><div><p class="eyebrow">إدارة الأمان</p><h2>المستخدمون والصلاحيات</h2></div></div><div class="security-grid"><div class="panel"><h3>إنشاء مستخدم</h3><form id="security-user-form" class="security-form"><input name="username" placeholder="اسم المستخدم" required /><input name="displayNameAr" placeholder="الاسم الظاهر" required /><input name="password" type="password" placeholder="كلمة المرور (8 أحرف على الأقل)" minlength="8" required /><button class="primary-button" type="submit">إضافة المستخدم</button></form></div><div class="panel"><h3>المستخدمون الحاليون</h3><div id="security-users" class="security-users">جارٍ التحميل...</div></div></div>';
+  try { const [users, roles] = await Promise.all([window.onyxAPI.listUsers(), window.onyxAPI.listRoles()]); const roleOptions = roles.map(r => `<option value="${esc(r.ROLE_CODE)}">${esc(r.ROLE_NAME_AR)}</option>`).join(''); $('security-users').innerHTML = users.length ? users.map(u => `<div class="security-user"><div><strong>${esc(u.DISPLAY_NAME_AR)}</strong><small>${esc(u.USERNAME)} · ${Number(u.ACTIVE_FLAG) ? 'نشط' : 'معطل'}</small></div><select data-user-id="${u.USER_ID}" class="role-select"><option value="">تعيين دور...</option>${roleOptions}</select></div>`).join('') : '<p class="empty-cell">لا يوجد مستخدمون.</p>';
+    document.querySelectorAll('.role-select').forEach(select => select.addEventListener('change', async event => { if (!event.target.value) return; try { await window.onyxAPI.assignRole({ userId: event.target.dataset.userId, roleCode: event.target.value }); showToast('تم تحديث دور المستخدم'); } catch (error) { showToast(error.message); } }));
+  } catch (error) { $('security-users').innerHTML = `<p class="login-error">${esc(error.message)}</p>`; }
+  $('security-user-form').addEventListener('submit', async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); try { await window.onyxAPI.createUser(data); showToast('تم إنشاء المستخدم'); await renderSecurity(); } catch (error) { showToast(error.message); } });
+}
+async function completeLogin(session) { $('login-screen').classList.add('hidden'); const name = document.querySelector('.user-mini strong'); const role = document.querySelector('.user-mini span:not(.dots)'); if (name) name.textContent = session.displayNameAr; if (role) role.textContent = session.roles?.[0]?.ROLE_NAME_AR || 'مستخدم'; refreshDbStatus(); refreshDashboardMetrics(); }
+async function bootAuthentication() { try { const hasUsers = await window.onyxAPI.hasUsers(); if (!hasUsers) { $('login-title').textContent = 'تهيئة مدير النظام'; $('login-subtitle').textContent = 'أنشئ أول مستخدم بصلاحيات كاملة للبدء'; $('setup-fields').classList.remove('hidden'); document.querySelector('.login-submit').textContent = 'إنشاء المدير والدخول'; } const session = await window.onyxAPI.currentSession(); if (session) await completeLogin(session); } catch (error) { $('login-error').textContent = error.message; } }
+$('login-form')?.addEventListener('submit', async event => { event.preventDefault(); const errorBox = $('login-error'); errorBox.textContent = ''; const username = $('login-username').value.trim(); const password = $('login-password').value; try { if (!$('setup-fields').classList.contains('hidden')) { const displayNameAr = $('setup-display').value.trim(); const confirm = $('setup-confirm').value; if (password !== confirm) throw new Error('تأكيد كلمة المرور غير مطابق.'); await window.onyxAPI.createUser({ username, displayNameAr, password }); } const session = await window.onyxAPI.login({ username, password }); await completeLogin(session); showToast(`مرحباً ${session.displayNameAr}`); } catch (error) { errorBox.textContent = error.message; } });
+document.querySelector('.user-mini')?.addEventListener('click', async () => { if (confirm('هل تريد تسجيل الخروج؟')) { await window.onyxAPI.logout(); location.reload(); } });
+window.addEventListener('DOMContentLoaded', bootAuthentication);
