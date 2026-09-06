@@ -60,7 +60,7 @@ function openForm(view) {
   const titles = { journal:'قيد يومية جديد', accounts:'إضافة حساب', sales:'فاتورة مبيعات جديدة', purchases:'فاتورة مشتريات جديدة', inventory:'إضافة صنف جديد', contacts:'إضافة جهة اتصال', reports:'تحديث التقارير' };
   const form = $('form-modal');
   $('modal-title').textContent = titles[view];
-  const fields = view === 'journal' ? [['description','البيان'],['debit','المبلغ المدين','number'],['credit','المبلغ الدائن','number']] : view === 'accounts' ? [['code','رمز الحساب'],['name','اسم الحساب'],['type','نوع الحساب']] : view === 'inventory' ? [['code','رمز الصنف'],['name','اسم الصنف'],['unit','الوحدة'],['qty','الكمية','number'],['cost','سعر التكلفة','number']] : [['party',view === 'purchases' ? 'اسم المورد' : 'اسم العميل'],['total','الإجمالي','number']];
+  const fields = view === 'journal' ? [['description','البيان'],['debit','المبلغ المدين','number'],['credit','المبلغ الدائن','number']] : view === 'accounts' ? [['code','رمز الحساب'],['name','اسم الحساب'],['type','نوع الحساب']] : view === 'inventory' ? [['code','رمز الصنف'],['name','اسم الصنف'],['unit','الوحدة'],['qty','الكمية','number'],['cost','سعر التكلفة','number']] : view === 'contacts' ? [['code','رمز الجهة'],['name','اسم الجهة'],['phone','الهاتف'],['email','البريد الإلكتروني']] : [['party',view === 'purchases' ? 'اسم المورد' : 'اسم العميل'],['total','الإجمالي','number']];
   $('modal-fields').innerHTML = fields.map(([name,label,type='text']) => `<label>${label}<input name="${name}" type="${type}" required /></label>`).join('');
   form.dataset.view = view; form.classList.add('open');
 }
@@ -71,7 +71,8 @@ $('entry-form').addEventListener('submit', async event => {
   event.preventDefault(); const view = event.currentTarget.parentElement.dataset.view; const data = Object.fromEntries(new FormData(event.currentTarget)); const date = new Date().toISOString().slice(0,10);
   if (view === 'journal') state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4,'0')}`, date, description: data.description, debit: Number(data.debit), credit: Number(data.credit), status: 'مسودة' });
   else if (view === 'accounts') { if (window.onyxAPI?.createAccount) { await window.onyxAPI.createAccount({ code:data.code, name:data.name, type:data.type }); } state.accounts.push({ code:data.code, name:data.name, type:data.type, balance:0 }); }
-  else if (view === 'inventory') state.items.push({ code:data.code, name:data.name, unit:data.unit, qty:Number(data.qty), cost:Number(data.cost) });
+  else if (view === 'inventory') { if (window.onyxAPI?.createItem) await window.onyxAPI.createItem({ code:data.code, name:data.name, unit:data.unit, quantity:data.qty, cost:data.cost }); state.items.push({ code:data.code, name:data.name, unit:data.unit, qty:Number(data.qty), cost:Number(data.cost) }); }
+  else if (view === 'contacts') { if (window.onyxAPI?.createContact) await window.onyxAPI.createContact({ code:data.code, name:data.name, phone:data.phone, email:data.email }); }
   else if (['sales','purchases'].includes(view)) state.invoices.unshift({ ref:`${view === 'sales' ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4,'0')}`, kind:view === 'sales' ? 'مبيعات' : 'مشتريات', party:data.party, total:Number(data.total), date });
   save(); closeForm(); renderModule(view); showToast('تم حفظ السجل محلياً بنجاح');
 });
@@ -104,10 +105,11 @@ async function loadLiveRows(view) {
   try {
     let rows = [];
     if (view === 'accounts') { try { rows = await window.onyxAPI.modernAccounts($('module-search')?.value || ''); } catch (_) { rows = await window.onyxAPI.accounts($('module-search')?.value || ''); } }
-    if (view === 'contacts') rows = await window.onyxAPI.customers($('module-search')?.value || '');
+    if (view === 'contacts') { try { rows = await window.onyxAPI.modernContacts($('module-search')?.value || ''); } catch (_) { rows = await window.onyxAPI.customers($('module-search')?.value || ''); } }
+    if (view === 'inventory') rows = await window.onyxAPI.modernItems($('module-search')?.value || '');
     if (view === 'journal') rows = await window.onyxAPI.journal(50);
     if (!rows.length || !$('module-body')) return;
-    const mapped = view === 'accounts' ? rows.map(a => [a.ACCOUNT_CODE || a.A_CODE, a.ACCOUNT_NAME_AR || a.A_NAME, a.ACCOUNT_TYPE || a.A_LEVEL || '', money(a.OPENING_BALANCE ?? a.DR)]) : view === 'contacts' ? rows.map(c => [c.C_A_NAME, 'عميل', c.C_PHONE || c.C_MOBILE || '', c.C_E_MAIL || '']) : rows.map(j => [j.DOC_NO || j.JV_NO || '', j.DOC_DATE || j.AD_DATE || '', j.DOC_DESC || j.DESCRIPTION || '', money(j.DEBIT || j.DR), money(j.CREDIT || j.CR), '<span class="status paid">مستورد</span>']);
+    const mapped = view === 'accounts' ? rows.map(a => [a.ACCOUNT_CODE || a.A_CODE, a.ACCOUNT_NAME_AR || a.A_NAME, a.ACCOUNT_TYPE || a.A_LEVEL || '', money(a.OPENING_BALANCE ?? a.DR)]) : view === 'contacts' ? rows.map(c => [c.NAME_AR || c.C_A_NAME, c.CONTACT_TYPE || 'CUSTOMER', c.PHONE || c.C_PHONE || c.C_MOBILE || '', c.EMAIL || c.C_E_MAIL || '']) : view === 'inventory' ? rows.map(i => [i.ITEM_CODE, i.ITEM_NAME_AR, i.UNIT_NAME, i.QUANTITY, money(i.COST_PRICE)]) : rows.map(j => [j.DOC_NO || j.JV_NO || '', j.DOC_DATE || j.AD_DATE || '', j.DOC_DESC || j.DESCRIPTION || '', money(j.DEBIT || j.DR), money(j.CREDIT || j.CR), '<span class="status paid">مستورد</span>']);
     $('module-body').innerHTML = renderRows(mapped);
     const count = document.querySelector('.table-tools span'); if (count) count.textContent = `${rows.length} سجل من Oracle`;
   } catch (error) { console.warn('Oracle module read unavailable:', error.message); }
