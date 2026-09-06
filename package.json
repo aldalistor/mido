@@ -7,6 +7,7 @@
     "start": "electron .",
     "dev": "electron .",
     "test:db": "node test-db.js",
+    "test:journal": "node test-modern-journal.js",
     "build:win": "electron-builder --win"
   },
   "author": "Onyx Accounting",
