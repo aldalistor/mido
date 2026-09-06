@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+oracle/server/.env
+oracle/server/imports/*.dmp
+oracle/server/imports/*.log
+oracle/server/imports/*.sql

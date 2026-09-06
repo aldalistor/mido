@@ -1,0 +1,29 @@
+services:
+  oracle:
+    image: ${ORACLE_IMAGE:-gvenzl/oracle-xe:21-slim}
+    container_name: onyx-oracle
+    restart: unless-stopped
+    ports:
+      - "${ORACLE_PORT:-1521}:1521"
+      - "${ORACLE_EM_PORT:-5500}:5500"
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:?Set ORACLE_PASSWORD in .env}
+      APP_USER: ${APP_USER:-ONYX_APP}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?Set APP_USER_PASSWORD in .env}
+      ORACLE_DATABASE: ${ORACLE_DATABASE:-XEPDB1}
+      ORACLE_CHARACTERSET: ${ORACLE_CHARACTERSET:-AL32UTF8}
+      ENABLE_ARCHIVELOG: ${ENABLE_ARCHIVELOG:-false}
+    volumes:
+      - onyx_oracle_data:/opt/oracle/oradata
+      - ./init:/container-entrypoint-initdb.d:ro
+      - ./imports:/imports
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh" ]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+volumes:
+  onyx_oracle_data:
+    name: onyx_oracle_data
