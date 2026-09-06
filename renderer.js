@@ -179,12 +179,32 @@ function renderInventoryWorkspace() {
 
 function inventoryRows(items) { return items.length ? items.map(i => { const qty = Number(i.qty || 0); const low = qty <= 10; return `<tr><td><div class="item-cell"><span class="item-icon">▤</span><div><strong>${esc(i.name)}</strong><small>${low ? 'تحت حد إعادة الطلب' : 'متاح للبيع'}</small></div></div></td><td class="item-code">${esc(i.code)}</td><td>${esc(i.unit)}</td><td><strong>${qty.toLocaleString('ar-SA')}</strong></td><td>0</td><td>${money(i.cost)}</td><td><span class="status ${low ? 'pending' : 'paid'}">${low ? 'منخفض' : 'متاح'}</span></td><td><button class="row-menu">•••</button></td></tr>`; }).join('') : '<tr><td colspan="8" class="empty-cell">لا توجد أصناف مطابقة للبحث.</td></tr>'; }
 
+function renderSalesWorkspace() {
+  const sales = state.invoices.filter(i => i.kind === 'مبيعات');
+  const customers = state.contacts.filter(c => c.type === 'عميل');
+  const total = sales.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  $('generic-content').innerHTML = `<div class="module-toolbar accounting-toolbar"><div><p class="eyebrow">العمليات / المبيعات</p><h2>المبيعات والعملاء</h2><p class="toolbar-description">إدارة دورة البيع من العرض والفاتورة حتى التحصيل والقيد المحاسبي</p></div><div class="toolbar-actions"><button class="secondary-button" id="sales-report">◒ تقرير المبيعات</button><button class="primary-button" id="module-action">＋ فاتورة مبيعات</button></div></div><div class="sales-tabs"><button class="sales-tab active" data-sales-tab="invoices">فواتير المبيعات</button><button class="sales-tab" data-sales-tab="quotes">عروض الأسعار <b>6</b></button><button class="sales-tab" data-sales-tab="returns">مرتجعات المبيعات</button><button class="sales-tab" data-sales-tab="receipts">سندات القبض</button><button class="sales-tab" data-sales-tab="customers">العملاء</button></div><div class="account-summary sales-summary"><div><span>إجمالي المبيعات</span><strong>${money(total || 12500)}</strong><small class="summary-trend">↑ 12.8% هذا الشهر</small></div><div><span>ذمم العملاء</span><strong>${money(58320)}</strong><small class="summary-warning">8 فواتير مستحقة</small></div><div><span>فواتير مكتملة</span><strong>${sales.length || 1}</strong><small>من أصل ${sales.length || 1}</small></div><div><span>العملاء النشطون</span><strong>${customers.length || 1}</strong><small>آخر تحديث اليوم</small></div></div><div class="sales-layout"><section class="panel sales-list-panel"><div class="workspace-heading"><div><span class="section-kicker">المستندات البيعية</span><h3>آخر فواتير المبيعات</h3></div><button class="more">•••</button></div><div class="table-tools sales-tools"><input id="sales-search" placeholder="ابحث برقم الفاتورة أو العميل..." /><div class="filter-group"><button>هذا الشهر ▾</button><button>كل الحالات ▾</button></div></div><div class="table-scroll"><table class="sales-table"><thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>التاريخ</th><th>الإجمالي</th><th>المحصل</th><th>الحالة</th><th></th></tr></thead><tbody id="sales-body">${salesRows(sales)}</tbody></table></div></section><aside class="sales-side"><div class="panel sales-quick"><div class="workspace-heading"><div><span class="section-kicker">اختصارات المبيعات</span><h3>إجراء سريع</h3></div></div><button id="new-sales-quote">＋ إنشاء عرض سعر</button><button id="new-sales-return">↩ تسجيل مرتجع بيع</button><button id="new-customer-receipt">▣ تسجيل سند قبض</button></div><div class="panel customer-dues"><div class="workspace-heading"><div><span class="section-kicker">التحصيلات</span><h3>أرصدة العملاء</h3></div><button class="text-button" id="view-customers">عرض الكل</button></div>${customerDueRows(customers)}</div></aside></div>`;
+  $('module-action').addEventListener('click', () => openForm('sales'));
+  $('sales-report').addEventListener('click', () => showToast('تم تجهيز تقرير المبيعات للفترة الحالية'));
+  $('new-sales-quote').addEventListener('click', () => showToast('تم فتح شاشة عروض الأسعار'));
+  $('new-sales-return').addEventListener('click', () => showToast('اختر فاتورة مبيعات لتسجيل المرتجع'));
+  $('new-customer-receipt').addEventListener('click', () => showToast('سيتم فتح سند قبض للعميل'));
+  $('view-customers').addEventListener('click', () => showToast('تم فتح قائمة العملاء'));
+  document.querySelectorAll('.sales-tab').forEach(tab => tab.addEventListener('click', () => { document.querySelectorAll('.sales-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active'); if (tab.dataset.salesTab !== 'invoices') showToast(`شاشة ${tab.textContent.trim()} جاهزة للتوسع`); }));
+  $('sales-search').addEventListener('input', event => { const q = event.target.value.toLowerCase(); $('sales-body').innerHTML = salesRows(sales.filter(i => `${i.ref} ${i.party}`.toLowerCase().includes(q))); });
+}
+
+function salesRows(sales) { return sales.length ? sales.map(i => `<tr><td><strong class="journal-number">#${esc(i.ref)}</strong><small class="cell-muted">فاتورة ضريبية</small></td><td><strong>${esc(i.party)}</strong><small class="cell-muted">عميل نقدي/آجل</small></td><td>${esc(i.date)}</td><td><strong>${money(i.total)}</strong></td><td>${money(i.total)}</td><td><span class="status paid">مكتملة</span></td><td><button class="row-menu">•••</button></td></tr>`).join('') : '<tr><td colspan="7" class="empty-cell">لا توجد فواتير مبيعات.</td></tr>'; }
+
+function customerDueRows(customers) { const list = customers.length ? customers : [{ name: 'شركة الرواد للتجارة', code: 'C-001' }]; return list.map((c, index) => `<div class="customer-due-row"><span class="customer-avatar">${esc((c.name || 'ع').slice(0, 1))}</span><div><strong>${esc(c.name)}</strong><small>${index === 0 ? 'مستحق منذ 4 أيام' : 'حساب منتظم'}</small></div><b>${money(index === 0 ? 12500 : 1900)}</b></div>`).join(''); }
+
 function renderModule(view) {
   if (view === 'accounts') return renderAccountsWorkspace();
   if (view === 'journal') return renderJournalWorkspace();
   if (view === 'purchases') return renderPurchasesWorkspace();
   if (view === 'contacts') return renderSuppliersWorkspace();
   if (view === 'inventory') return renderInventoryWorkspace();
+  if (view === 'sales') return renderSalesWorkspace();
   const configs = {
     journal: { action: 'قيد جديد', columns: ['الرقم', 'التاريخ', 'البيان', 'مدين', 'دائن', 'الحالة'] },
     accounts: { action: 'حساب جديد', columns: ['الرمز', 'اسم الحساب', 'النوع', 'الرصيد'] },
@@ -243,7 +263,12 @@ async function submitLocal(view, data) {
   } else if (view === 'sales' || view === 'purchases') {
     const quantity = Number(data.quantity); const price = Number(data.unitPrice);
     if (quantity <= 0 || price < 0) throw new Error('أدخل كمية وسعرًا صحيحين.');
-    state.invoices.unshift({ ref: `${view === 'sales' ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4, '0')}`, kind: view === 'sales' ? 'مبيعات' : 'مشتريات', party: data.party, total: quantity * price, date });
+    const total = quantity * price;
+    const ref = `${view === 'sales' ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4, '0')}`;
+    state.invoices.unshift({ ref, kind: view === 'sales' ? 'مبيعات' : 'مشتريات', party: data.party, total, date });
+    state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4, '0')}`, date, description: view === 'sales' ? `قيد فاتورة مبيعات ${ref}` : `قيد فاتورة مشتريات ${ref}`, debit: total, credit: total, status: 'مرحّل', source: view === 'sales' ? 'SALE' : 'PURCHASE' });
+    const affectedAccount = state.accounts.find(a => view === 'sales' ? a.code === '4101' : a.code === '1101');
+    if (affectedAccount) affectedAccount.balance = Number(affectedAccount.balance || 0) + total;
     const item = state.items.find(i => i.code === data.itemCode);
     if (item && view === 'sales') item.qty = Math.max(0, Number(item.qty) - quantity);
     if (item && view === 'purchases') item.qty = Number(item.qty) + quantity;
