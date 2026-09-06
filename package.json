@@ -6,6 +6,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
+    "test": "npm run test:syntax",
+    "test:syntax": "node --check main.js && node --check preload.js && node --check renderer.js && node --check db.js",
     "test:db": "node test-db.js",
     "test:journal": "node test-modern-journal.js",
     "test:invoice": "node test-invoice.js",
