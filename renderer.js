@@ -1,51 +1,85 @@
 const labels = {
-  dashboard: 'لوحة التحكم',
-  journal: 'القيود اليومية',
-  accounts: 'دليل الحسابات',
-  reports: 'التقارير المالية',
-  sales: 'المبيعات',
-  purchases: 'المشتريات',
-  inventory: 'المخزون',
-  contacts: 'العملاء والموردون'
+  dashboard: 'لوحة التحكم', journal: 'القيود اليومية', accounts: 'دليل الحسابات',
+  reports: 'التقارير المالية', sales: 'المبيعات', purchases: 'المشتريات',
+  inventory: 'المخزون', contacts: 'العملاء والموردون'
 };
 
-const navItems = document.querySelectorAll('[data-view]');
-const dashboard = document.getElementById('dashboard-view');
-const generic = document.getElementById('generic-view');
-const pageTitle = document.getElementById('page-title');
-const genericTitle = document.getElementById('generic-title');
-const toast = document.getElementById('toast');
+const seed = {
+  accounts: [
+    { code: '1101', name: 'الصندوق الرئيسي', type: 'أصل', balance: 24500 },
+    { code: '1102', name: 'البنك العربي', type: 'أصل', balance: 101990 },
+    { code: '1201', name: 'العملاء', type: 'أصل', balance: 58320 },
+    { code: '2101', name: 'الموردون', type: 'التزام', balance: 36750 },
+    { code: '4101', name: 'إيرادات المبيعات', type: 'إيراد', balance: 184250 },
+    { code: '5101', name: 'المصروفات التشغيلية', type: 'مصروف', balance: 42180 }
+  ],
+  entries: [
+    { no: 'JV-0001', date: '2024-09-24', description: 'إثبات فاتورة مبيعات', debit: 12500, credit: 12500, status: 'مرحّل' },
+    { no: 'JV-0002', date: '2024-09-23', description: 'فاتورة مشتريات آجلة', debit: 4280, credit: 4280, status: 'مسودة' }
+  ],
+  invoices: [], items: []
+};
 
-function showToast(message) {
-  toast.textContent = message;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2200);
-}
+const state = JSON.parse(localStorage.getItem('onyx-state') || 'null') || seed;
+const save = () => localStorage.setItem('onyx-state', JSON.stringify(state));
+const money = value => `${Number(value || 0).toLocaleString('ar-SA')} ر.س`;
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const $ = id => document.getElementById(id);
+const toast = $('toast');
+function showToast(message) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }
 
 function switchView(view) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
-  if (view === 'dashboard') {
-    dashboard.classList.add('active-view');
-    generic.style.display = 'none';
-    pageTitle.textContent = labels.dashboard;
-    return;
-  }
-  dashboard.classList.remove('active-view');
-  generic.style.display = 'block';
-  pageTitle.textContent = labels[view] || 'الوحدة';
-  genericTitle.textContent = labels[view] || 'الوحدة';
+  document.querySelectorAll('.view').forEach(item => item.classList.remove('active-view'));
+  const target = $(view === 'dashboard' ? 'dashboard-view' : 'generic-view');
+  target.classList.add('active-view');
+  $('page-title').textContent = labels[view] || 'الوحدة';
+  $('generic-title').textContent = labels[view] || 'الوحدة';
+  if (view !== 'dashboard') renderModule(view);
 }
 
-navItems.forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
-document.getElementById('new-entry').addEventListener('click', () => {
-  switchView('journal');
-  showToast('تم فتح نموذج القيد اليومي الجديد');
+function renderModule(view) {
+  const title = labels[view];
+  const configs = {
+    journal: { action: 'قيد جديد', columns: ['الرقم','التاريخ','البيان','مدين','دائن','الحالة'], rows: state.entries.map(e => [e.no,e.date,e.description,money(e.debit),money(e.credit),`<span class="status ${e.status === 'مرحّل' ? 'paid' : 'pending'}">${e.status}</span>`]) },
+    accounts: { action: 'حساب جديد', columns: ['الرمز','اسم الحساب','النوع','الرصيد'], rows: state.accounts.map(a => [a.code,a.name,a.type,money(a.balance)]) },
+    sales: { action: 'فاتورة مبيعات', columns: ['المرجع','العميل','التاريخ','الإجمالي','الحالة'], rows: state.invoices.filter(i => i.kind === 'مبيعات').map(i => [i.ref,i.party,i.date,money(i.total),'<span class="status paid">مكتملة</span>']) },
+    purchases: { action: 'فاتورة مشتريات', columns: ['المرجع','المورد','التاريخ','الإجمالي','الحالة'], rows: state.invoices.filter(i => i.kind === 'مشتريات').map(i => [i.ref,i.party,i.date,money(i.total),'<span class="status pending">معلّقة</span>']) },
+    inventory: { action: 'إضافة صنف', columns: ['الرمز','الصنف','الوحدة','الكمية','سعر التكلفة'], rows: state.items.map(i => [i.code,i.name,i.unit,i.qty,money(i.cost)]) },
+    contacts: { action: 'إضافة جهة', columns: ['الاسم','النوع','الهاتف','الرصيد'], rows: [] },
+    reports: { action: 'تحديث التقارير', columns: ['التقرير','الفترة','الحالة'], rows: [['قائمة الدخل','الشهر الحالي','جاهز'],['ميزان المراجعة','الشهر الحالي','جاهز'],['أعمار الذمم','الشهر الحالي','جاهز']] }
+  };
+  const config = configs[view] || configs.reports;
+  $('generic-content').innerHTML = `<div class="module-toolbar"><div><p class="eyebrow">إدارة ${esc(title)}</p><h2>${esc(title)}</h2></div><button class="primary-button" id="module-action">＋ ${esc(config.action)}</button></div><div class="panel module-panel"><div class="table-tools"><input id="module-search" placeholder="ابحث في ${esc(title)}..." /><span>${config.rows.length} سجل</span></div><div class="table-scroll"><table><thead><tr>${config.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody id="module-body">${renderRows(config.rows)}</tbody></table></div></div>`;
+  $('module-action').addEventListener('click', () => openForm(view));
+  $('module-search').addEventListener('input', event => { const q = event.target.value.toLowerCase(); $('module-body').innerHTML = renderRows(config.rows.filter(row => row.join(' ').toLowerCase().includes(q))); });
+}
+function renderRows(rows) { return rows.length ? rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="8" class="empty-cell">لا توجد سجلات بعد. أضف أول سجل من الزر أعلاه.</td></tr>`; }
+
+function openForm(view) {
+  const titles = { journal:'قيد يومية جديد', accounts:'إضافة حساب', sales:'فاتورة مبيعات جديدة', purchases:'فاتورة مشتريات جديدة', inventory:'إضافة صنف جديد', contacts:'إضافة جهة اتصال', reports:'تحديث التقارير' };
+  const form = $('form-modal');
+  $('modal-title').textContent = titles[view];
+  const fields = view === 'journal' ? [['description','البيان'],['debit','المبلغ المدين','number'],['credit','المبلغ الدائن','number']] : view === 'accounts' ? [['code','رمز الحساب'],['name','اسم الحساب'],['type','نوع الحساب']] : view === 'inventory' ? [['code','رمز الصنف'],['name','اسم الصنف'],['unit','الوحدة'],['qty','الكمية','number'],['cost','سعر التكلفة','number']] : [['party',view === 'purchases' ? 'اسم المورد' : 'اسم العميل'],['total','الإجمالي','number']];
+  $('modal-fields').innerHTML = fields.map(([name,label,type='text']) => `<label>${label}<input name="${name}" type="${type}" required /></label>`).join('');
+  form.dataset.view = view; form.classList.add('open');
+}
+function closeForm() { $('form-modal').classList.remove('open'); }
+$('modal-close').addEventListener('click', closeForm);
+$('modal-cancel').addEventListener('click', closeForm);
+$('entry-form').addEventListener('submit', event => {
+  event.preventDefault(); const view = event.currentTarget.parentElement.dataset.view; const data = Object.fromEntries(new FormData(event.currentTarget)); const date = new Date().toISOString().slice(0,10);
+  if (view === 'journal') state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4,'0')}`, date, description: data.description, debit: Number(data.debit), credit: Number(data.credit), status: 'مسودة' });
+  else if (view === 'accounts') state.accounts.push({ code:data.code, name:data.name, type:data.type, balance:0 });
+  else if (view === 'inventory') state.items.push({ code:data.code, name:data.name, unit:data.unit, qty:Number(data.qty), cost:Number(data.cost) });
+  else if (['sales','purchases'].includes(view)) state.invoices.unshift({ ref:`${view === 'sales' ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4,'0')}`, kind:view === 'sales' ? 'مبيعات' : 'مشتريات', party:data.party, total:Number(data.total), date });
+  save(); closeForm(); renderModule(view); showToast('تم حفظ السجل محلياً بنجاح');
 });
-document.getElementById('generic-action').addEventListener('click', () => showToast('تم تجهيز نموذج الإضافة الجديد'));
-document.querySelectorAll('.quick-actions button').forEach(button => button.addEventListener('click', () => {
-  switchView(button.dataset.view);
-  showToast(`تم فتح وحدة ${labels[button.dataset.view]}`);
-}));
-document.querySelector('.text-button').addEventListener('click', () => showToast('تم تحميل جميع العمليات'));
+
+document.querySelectorAll('[data-view]').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
+$('new-entry').addEventListener('click', () => { switchView('journal'); setTimeout(() => openForm('journal'), 0); });
+$('generic-action').addEventListener('click', () => openForm(Object.keys(labels).find(k => labels[k] === $('generic-title').textContent) || 'journal'));
+document.querySelectorAll('.quick-actions button').forEach(button => button.addEventListener('click', () => { switchView(button.dataset.view); showToast(`تم فتح وحدة ${labels[button.dataset.view]}`); }));
+document.querySelector('.text-button').addEventListener('click', () => { switchView('journal'); showToast('تم تحميل سجل القيود اليومية'); });
 document.querySelector('.notification').addEventListener('click', () => showToast('لا توجد إشعارات جديدة'));
-document.querySelector('.icon-button').addEventListener('click', () => showToast('البحث العام جاهز للاستخدام'));
+document.querySelector('.icon-button').addEventListener('click', () => showToast('استخدم البحث داخل كل وحدة للوصول السريع'));
