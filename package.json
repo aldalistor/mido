@@ -6,13 +6,14 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
+    "test:db": "node test-db.js",
     "build:win": "electron-builder --win"
   },
   "author": "Onyx Accounting",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.onyx.accounting",
@@ -25,10 +26,15 @@
       "index.html",
       "styles.css",
       "renderer.js",
+      "preload.js",
+      "db.js",
       "assets/**/*"
     ],
     "win": {
       "target": "nsis"
     }
+  },
+  "dependencies": {
+    "oracledb": "^6.10.0"
   }
 }

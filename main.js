@@ -1,5 +1,14 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const db = require('./db');
+
+function registerDatabaseHandlers() {
+  ipcMain.handle('db:test', () => db.test());
+  ipcMain.handle('db:dashboard', () => db.dashboard());
+  ipcMain.handle('db:accounts', (_event, payload = {}) => db.accounts(payload.search || ''));
+  ipcMain.handle('db:customers', (_event, payload = {}) => db.customers(payload.search || ''));
+  ipcMain.handle('db:journal', (_event, payload = {}) => db.journal(payload.limit || 50));
+}
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -11,20 +20,22 @@ function createWindow() {
     title: 'أونكس المحاسبي',
     webPreferences: {
       contextIsolation: true,
-      nodeIntegration: false
-    }
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
   });
 
   window.loadFile(path.join(__dirname, 'index.html'));
 }
 
 app.whenReady().then(() => {
+  registerDatabaseHandlers();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+app.on('before-quit', async () => { await db.close(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

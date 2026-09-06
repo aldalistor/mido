@@ -83,3 +83,36 @@ document.querySelectorAll('.quick-actions button').forEach(button => button.addE
 document.querySelector('.text-button').addEventListener('click', () => { switchView('journal'); showToast('تم تحميل سجل القيود اليومية'); });
 document.querySelector('.notification').addEventListener('click', () => showToast('لا توجد إشعارات جديدة'));
 document.querySelector('.icon-button').addEventListener('click', () => showToast('استخدم البحث داخل كل وحدة للوصول السريع'));
+
+async function refreshDbStatus() {
+  const status = $('db-status');
+  if (!status || !window.onyxAPI?.dbTest) return;
+  status.classList.add('checking'); status.innerHTML = '<i></i> جارٍ الاتصال';
+  try {
+    const info = await window.onyxAPI.dbTest();
+    status.classList.remove('checking'); status.classList.add('connected'); status.innerHTML = `<i></i> متصل: ${esc(info.DB_USER)}`;
+    showToast(`تم الاتصال بقاعدة Oracle عبر ${info.SERVICE_NAME}`);
+    return true;
+  } catch (error) {
+    status.classList.remove('checking', 'connected'); status.innerHTML = '<i></i> غير متصل';
+    console.warn('Oracle connection unavailable:', error.message);
+    return false;
+  }
+}
+async function loadLiveRows(view) {
+  if (!window.onyxAPI) return;
+  try {
+    let rows = [];
+    if (view === 'accounts') rows = await window.onyxAPI.accounts($('module-search')?.value || '');
+    if (view === 'contacts') rows = await window.onyxAPI.customers($('module-search')?.value || '');
+    if (view === 'journal') rows = await window.onyxAPI.journal(50);
+    if (!rows.length || !$('module-body')) return;
+    const mapped = view === 'accounts' ? rows.map(a => [a.A_CODE, a.A_NAME, a.A_LEVEL ?? '', money(a.DR)]) : view === 'contacts' ? rows.map(c => [c.C_A_NAME, 'عميل', c.C_PHONE || c.C_MOBILE || '', c.C_E_MAIL || '']) : rows.map(j => [j.DOC_NO || j.JV_NO || '', j.DOC_DATE || j.AD_DATE || '', j.DOC_DESC || j.DESCRIPTION || '', money(j.DEBIT || j.DR), money(j.CREDIT || j.CR), '<span class="status paid">مستورد</span>']);
+    $('module-body').innerHTML = renderRows(mapped);
+    const count = document.querySelector('.table-tools span'); if (count) count.textContent = `${rows.length} سجل من Oracle`;
+  } catch (error) { console.warn('Oracle module read unavailable:', error.message); }
+}
+const originalSwitchView = switchView;
+switchView = function(view) { originalSwitchView(view); setTimeout(() => loadLiveRows(view), 0); };
+$('db-status')?.addEventListener('click', refreshDbStatus);
+window.addEventListener('DOMContentLoaded', refreshDbStatus);
