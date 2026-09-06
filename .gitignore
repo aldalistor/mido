@@ -5,3 +5,5 @@ oracle/server/.env
 oracle/server/imports/*.dmp
 oracle/server/imports/*.log
 oracle/server/imports/*.sql
+reference_archives/*.zip
+reference_archives/*.fmx
