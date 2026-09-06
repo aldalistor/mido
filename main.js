@@ -6,8 +6,11 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:test', () => db.test());
   ipcMain.handle('db:dashboard', () => db.dashboard());
   ipcMain.handle('db:accounts', (_event, payload = {}) => db.accounts(payload.search || ''));
+  ipcMain.handle('db:modern-accounts', (_event, payload = {}) => db.modernAccounts(payload.search || ''));
+  ipcMain.handle('db:create-account', (_event, payload = {}) => db.createModernAccount(payload));
   ipcMain.handle('db:customers', (_event, payload = {}) => db.customers(payload.search || ''));
   ipcMain.handle('db:journal', (_event, payload = {}) => db.journal(payload.limit || 50));
+  ipcMain.handle('db:create-journal', (_event, payload = {}) => db.createModernJournal(payload));
 }
 
 function createWindow() {

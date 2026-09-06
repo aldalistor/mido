@@ -67,10 +67,10 @@ function openForm(view) {
 function closeForm() { $('form-modal').classList.remove('open'); }
 $('modal-close').addEventListener('click', closeForm);
 $('modal-cancel').addEventListener('click', closeForm);
-$('entry-form').addEventListener('submit', event => {
+$('entry-form').addEventListener('submit', async event => {
   event.preventDefault(); const view = event.currentTarget.parentElement.dataset.view; const data = Object.fromEntries(new FormData(event.currentTarget)); const date = new Date().toISOString().slice(0,10);
   if (view === 'journal') state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4,'0')}`, date, description: data.description, debit: Number(data.debit), credit: Number(data.credit), status: 'مسودة' });
-  else if (view === 'accounts') state.accounts.push({ code:data.code, name:data.name, type:data.type, balance:0 });
+  else if (view === 'accounts') { if (window.onyxAPI?.createAccount) { await window.onyxAPI.createAccount({ code:data.code, name:data.name, type:data.type }); } state.accounts.push({ code:data.code, name:data.name, type:data.type, balance:0 }); }
   else if (view === 'inventory') state.items.push({ code:data.code, name:data.name, unit:data.unit, qty:Number(data.qty), cost:Number(data.cost) });
   else if (['sales','purchases'].includes(view)) state.invoices.unshift({ ref:`${view === 'sales' ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4,'0')}`, kind:view === 'sales' ? 'مبيعات' : 'مشتريات', party:data.party, total:Number(data.total), date });
   save(); closeForm(); renderModule(view); showToast('تم حفظ السجل محلياً بنجاح');
@@ -103,11 +103,11 @@ async function loadLiveRows(view) {
   if (!window.onyxAPI) return;
   try {
     let rows = [];
-    if (view === 'accounts') rows = await window.onyxAPI.accounts($('module-search')?.value || '');
+    if (view === 'accounts') { try { rows = await window.onyxAPI.modernAccounts($('module-search')?.value || ''); } catch (_) { rows = await window.onyxAPI.accounts($('module-search')?.value || ''); } }
     if (view === 'contacts') rows = await window.onyxAPI.customers($('module-search')?.value || '');
     if (view === 'journal') rows = await window.onyxAPI.journal(50);
     if (!rows.length || !$('module-body')) return;
-    const mapped = view === 'accounts' ? rows.map(a => [a.A_CODE, a.A_NAME, a.A_LEVEL ?? '', money(a.DR)]) : view === 'contacts' ? rows.map(c => [c.C_A_NAME, 'عميل', c.C_PHONE || c.C_MOBILE || '', c.C_E_MAIL || '']) : rows.map(j => [j.DOC_NO || j.JV_NO || '', j.DOC_DATE || j.AD_DATE || '', j.DOC_DESC || j.DESCRIPTION || '', money(j.DEBIT || j.DR), money(j.CREDIT || j.CR), '<span class="status paid">مستورد</span>']);
+    const mapped = view === 'accounts' ? rows.map(a => [a.ACCOUNT_CODE || a.A_CODE, a.ACCOUNT_NAME_AR || a.A_NAME, a.ACCOUNT_TYPE || a.A_LEVEL || '', money(a.OPENING_BALANCE ?? a.DR)]) : view === 'contacts' ? rows.map(c => [c.C_A_NAME, 'عميل', c.C_PHONE || c.C_MOBILE || '', c.C_E_MAIL || '']) : rows.map(j => [j.DOC_NO || j.JV_NO || '', j.DOC_DATE || j.AD_DATE || '', j.DOC_DESC || j.DESCRIPTION || '', money(j.DEBIT || j.DR), money(j.CREDIT || j.CR), '<span class="status paid">مستورد</span>']);
     $('module-body').innerHTML = renderRows(mapped);
     const count = document.querySelector('.table-tools span'); if (count) count.textContent = `${rows.length} سجل من Oracle`;
   } catch (error) { console.warn('Oracle module read unavailable:', error.message); }

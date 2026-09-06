@@ -1,67 +1,19 @@
 const oracledb = require('oracledb');
 
 let pool;
-
-function config() {
-  return {
-    user: process.env.ONYX_DB_USER || 'ONYX_APP',
-    password: process.env.ONYX_DB_PASSWORD,
-    connectString: process.env.ONYX_DB_CONNECT_STRING || '127.0.0.1:1521/XEPDB1',
-    poolMin: 0,
-    poolMax: 4,
-    poolIncrement: 1,
-    stmtCacheSize: 30,
-  };
-}
-
-function ensurePassword() {
-  if (!config().password) throw new Error('لم يتم ضبط ONYX_DB_PASSWORD في بيئة التشغيل.');
-}
-
-async function getPool() {
-  ensurePassword();
-  if (!pool) pool = await oracledb.createPool(config());
-  return pool;
-}
-
-async function query(sql, binds = {}, options = {}) {
-  const connection = await (await getPool()).getConnection();
-  try {
-    return await connection.execute(sql, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT, ...options });
-  } finally {
-    await connection.close();
-  }
-}
-
-async function test() {
-  const result = await query(`select user as DB_USER, sys_context('USERENV','SERVICE_NAME') as SERVICE_NAME, sys_context('USERENV','DB_NAME') as DB_NAME from dual`);
-  return result.rows[0];
-}
-
-async function dashboard() {
-  const [accounts, customers, journals] = await Promise.all([
-    query(`select count(*) as COUNT from ACCOUNT`),
-    query(`select count(*) as COUNT from CUSTOMER`),
-    query(`select count(*) as COUNT from MASTER_JOURNAL_V`),
-  ]);
-  return { accounts: accounts.rows[0].COUNT, customers: customers.rows[0].COUNT, journals: journals.rows[0].COUNT };
-}
-
-async function accounts(search = '') {
-  return (await query(`select A_CODE, A_NAME, A_NAME_ENG, A_LEVEL, A_PARENT, DR, INACTIVE_RES from ACCOUNT where (:search is null or upper(A_CODE) like upper(:likeSearch) or upper(A_NAME) like upper(:likeSearch)) order by A_CODE fetch first 250 rows only`, { search: search || null, likeSearch: `%${search}%` })).rows;
-}
-
-async function customers(search = '') {
-  return (await query(`select C_CODE, C_A_NAME, C_E_NAME, C_PHONE, C_MOBILE, C_E_MAIL, INACTIVE from CUSTOMER where (:search is null or upper(C_CODE) like upper(:likeSearch) or upper(C_A_NAME) like upper(:likeSearch)) order by C_CODE fetch first 250 rows only`, { search: search || null, likeSearch: `%${search}%` })).rows;
-}
-
-async function journal(limit = 50) {
-  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 250);
-  return (await query(`select * from (select * from MASTER_JOURNAL_V order by AD_DATE desc nulls last) where rownum <= :limit`, { limit: safeLimit })).rows;
-}
-
-async function close() {
-  if (pool) { await pool.close(10); pool = undefined; }
-}
-
-module.exports = { test, dashboard, accounts, customers, journal, close };
+function config() { return { user: process.env.ONYX_DB_USER || 'ONYX_APP', password: process.env.ONYX_DB_PASSWORD, connectString: process.env.ONYX_DB_CONNECT_STRING || '127.0.0.1:1521/XEPDB1', poolMin: 0, poolMax: 4, poolIncrement: 1, stmtCacheSize: 30 }; }
+function ensurePassword() { if (!config().password) throw new Error('لم يتم ضبط ONYX_DB_PASSWORD في بيئة التشغيل.'); }
+async function getPool() { ensurePassword(); if (!pool) pool = await oracledb.createPool(config()); return pool; }
+async function query(sql, binds = {}, options = {}) { const connection = await (await getPool()).getConnection(); try { return await connection.execute(sql, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT, ...options }); } finally { await connection.close(); } }
+async function withConnection(work) { const connection = await (await getPool()).getConnection(); try { return await work(connection); } finally { await connection.close(); } }
+async function test() { return (await query(`select user as DB_USER, sys_context('USERENV','SERVICE_NAME') as SERVICE_NAME, sys_context('USERENV','DB_NAME') as DB_NAME from dual`)).rows[0]; }
+async function dashboard() { const [accounts, customers, journals] = await Promise.all([query(`select count(*) as COUNT from ACCOUNT`), query(`select count(*) as COUNT from CUSTOMER`), query(`select count(*) as COUNT from MASTER_JOURNAL_V`)]); return { accounts: accounts.rows[0].COUNT, customers: customers.rows[0].COUNT, journals: journals.rows[0].COUNT }; }
+async function accounts(search = '') { return (await query(`select A_CODE, A_NAME, A_NAME_ENG, A_LEVEL, A_PARENT, DR, INACTIVE_RES from ACCOUNT where (:search is null or upper(A_CODE) like upper(:likeSearch) or upper(A_NAME) like upper(:likeSearch)) order by A_CODE fetch first 250 rows only`, { search: search || null, likeSearch: `%${search}%` })).rows; }
+async function customers(search = '') { return (await query(`select C_CODE, C_A_NAME, C_E_NAME, C_PHONE, C_MOBILE, C_E_MAIL, INACTIVE from CUSTOMER where (:search is null or upper(C_CODE) like upper(:likeSearch) or upper(C_A_NAME) like upper(:likeSearch)) order by C_CODE fetch first 250 rows only`, { search: search || null, likeSearch: `%${search}%` })).rows; }
+async function journal(limit = 50) { const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 250); return (await query(`select * from (select * from MASTER_JOURNAL_V order by AD_DATE desc nulls last) where rownum <= :limit`, { limit: safeLimit })).rows; }
+async function modernAccounts(search = '') { return (await query(`select ACCOUNT_ID, ACCOUNT_CODE, ACCOUNT_NAME_AR, ACCOUNT_NAME_EN, ACCOUNT_TYPE, PARENT_CODE, ACTIVE_FLAG, OPENING_BALANCE from ONYX_ACCOUNT where (:search is null or upper(ACCOUNT_CODE) like upper(:likeSearch) or upper(ACCOUNT_NAME_AR) like upper(:likeSearch)) order by ACCOUNT_CODE fetch first 250 rows only`, { search: search || null, likeSearch: `%${search}%` })).rows; }
+async function modernContext(connection) { const result = await connection.execute(`select c.company_id, b.branch_id, fy.fiscal_year_id from onyx_company c join onyx_branch b on b.company_id=c.company_id join onyx_fiscal_year fy on fy.company_id=c.company_id where c.active_flag=1 and b.active_flag=1 and fy.status_code='OPEN' fetch first 1 row only`, {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }); if (!result.rows[0]) throw new Error('لا يوجد سياق شركة/فرع/سنة مالية مفتوح.'); return result.rows[0]; }
+async function createModernAccount(payload = {}) { const code = String(payload.code || '').trim(); const name = String(payload.name || '').trim(); if (!code || !name) throw new Error('رمز الحساب واسم الحساب مطلوبان.'); return withConnection(async connection => { const ctx = await modernContext(connection); const result = await connection.execute(`insert into ONYX_ACCOUNT(company_id, account_code, account_name_ar, account_type, parent_code, opening_balance) values (:company_id,:code,:name,:type,:parent_code,:opening_balance) returning account_id into :account_id`, { company_id: ctx.COMPANY_ID, code, name, type: payload.type || 'GENERAL', parent_code: payload.parentCode || null, opening_balance: Number(payload.openingBalance || 0), account_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } }, { autoCommit: true }); return { accountId: result.outBinds.account_id[0], code, name }; }); }
+async function createModernJournal(payload = {}) { const description = String(payload.description || '').trim(); const lines = Array.isArray(payload.lines) ? payload.lines : []; const totalDebit = lines.reduce((sum, line) => sum + Number(line.debit || 0), 0); const totalCredit = lines.reduce((sum, line) => sum + Number(line.credit || 0), 0); if (!description || lines.length < 2 || Math.abs(totalDebit - totalCredit) > 0.001) throw new Error('القيد يحتاج بياناً وسطرين على الأقل، ويجب تساوي المدين والدائن.'); return withConnection(async connection => { const ctx = await modernContext(connection); const entryNo = `JV-${Date.now()}`; const entry = await connection.execute(`insert into ONYX_JOURNAL_ENTRY(company_id,branch_id,fiscal_year_id,entry_no,entry_date,description_ar,status_code) values (:company_id,:branch_id,:fiscal_year_id,:entry_no,trunc(sysdate),:description,'DRAFT') returning entry_id into :entry_id`, { ...ctx, entry_no: entryNo, description, entry_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } }); const entryId = entry.outBinds.entry_id[0]; for (const line of lines) await connection.execute(`insert into ONYX_JOURNAL_LINE(entry_id,account_id,line_description_ar,debit,credit) values (:entry_id,:account_id,:description,:debit,:credit)`, { entry_id: entryId, account_id: Number(line.accountId), description: line.description || description, debit: Number(line.debit || 0), credit: Number(line.credit || 0) }); await connection.commit(); return { entryId, entryNo, totalDebit, totalCredit }; }); }
+async function close() { if (pool) { await pool.close(10); pool = undefined; } }
+module.exports = { test, dashboard, accounts, customers, journal, modernAccounts, createModernAccount, createModernJournal, close };
