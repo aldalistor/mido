@@ -55,6 +55,7 @@ document.querySelector('.top-date').textContent = today();
 
 function switchView(view) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
+  openScreenTab(view);
   document.querySelectorAll('.view').forEach(item => item.classList.remove('active-view'));
   const target = $(view === 'dashboard' ? 'dashboard-view' : 'generic-view');
   target.classList.add('active-view');
@@ -63,6 +64,30 @@ function switchView(view) {
   if (view === 'security') renderSecurity();
   else if (view !== 'dashboard') renderModule(view);
   if (view !== 'dashboard' && dataMode === 'oracle') setTimeout(() => loadLiveRows(view), 0);
+}
+
+function openScreenTab(view) {
+  const tabs = $('screen-tabs');
+  if (!tabs || view === 'dashboard' && tabs.querySelector('[data-view="dashboard"]')) {
+    tabs?.querySelectorAll('.screen-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.view === view));
+    return;
+  }
+  const tab = document.createElement('button');
+  tab.className = 'screen-tab';
+  tab.dataset.view = view;
+  tab.innerHTML = `<span>${view === 'journal' ? '≡' : view === 'sales' ? '↗' : view === 'purchases' ? '↙' : view === 'inventory' ? '▤' : view === 'contacts' ? '♙' : view === 'accounts' ? '◫' : view === 'reports' ? '◒' : '⚙'}</span> ${esc(labels[view] || 'الوحدة')} <b class="tab-close" aria-label="إغلاق">×</b>`;
+  tab.addEventListener('click', event => {
+    if (event.target.classList.contains('tab-close')) {
+      event.stopPropagation();
+      tab.remove();
+      const remaining = tabs.querySelectorAll('.screen-tab');
+      if (tab.classList.contains('active')) switchView(remaining.length ? remaining[remaining.length - 1].dataset.view : 'dashboard');
+      return;
+    }
+    switchView(view);
+  });
+  tabs.appendChild(tab);
+  tabs.querySelectorAll('.screen-tab').forEach(item => item.classList.toggle('active', item === tab));
 }
 
 function localRows(view) {
@@ -169,6 +194,9 @@ $('entry-form').addEventListener('submit', async event => {
 
 document.querySelectorAll('[data-view]').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
 $('new-entry').addEventListener('click', () => { switchView('journal'); setTimeout(() => openForm('journal'), 0); });
+$('hero-new-entry')?.addEventListener('click', () => { switchView('journal'); setTimeout(() => openForm('journal'), 0); });
+$('refresh-dashboard')?.addEventListener('click', async () => { await refreshDbStatus(); await refreshDashboardMetrics(); showToast('تم تحديث مؤشرات لوحة التحكم'); });
+$('global-search')?.addEventListener('click', () => showToast('استخدم البحث داخل الوحدة للوصول السريع'));
 $('generic-action').addEventListener('click', () => openForm('journal'));
 document.querySelectorAll('.quick-actions button').forEach(button => button.addEventListener('click', () => { switchView(button.dataset.view); setTimeout(() => { if (button.dataset.view !== 'dashboard') openForm(button.dataset.view); }, 0); }));
 document.querySelector('.text-button').addEventListener('click', () => switchView('journal'));
