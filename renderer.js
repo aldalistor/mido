@@ -364,15 +364,14 @@ async function submitLocal(view, data) {
   } else if (view === 'sales' || view === 'purchases') {
     const quantity = Number(data.quantity); const price = Number(data.unitPrice);
     if (quantity <= 0 || price < 0) throw new Error('أدخل كمية وسعرًا صحيحين.');
-    const total = quantity * price; const currency = data.currency || 'SAR'; const exchangeRate = Number(data.exchangeRate || currencyInfo(currency).rate || 1); const baseTotal = total * exchangeRate;
+    const item = state.items.find(i => i.code === data.itemCode); if (!item) throw new Error('الصنف غير موجود.'); if (view === 'sales' && Number(item.qty) < quantity) throw new Error(`الرصيد المخزني غير كافٍ للصنف ${item.name}.`);
+    const total = quantity * price; const currency = data.currency || 'SAR'; const exchangeRate = Number(data.exchangeRate || currencyInfo(currency).rate || 1); const baseTotal = total * exchangeRate; const costTotal = Number(item.cost || 0) * quantity;
     const ref = `${view === 'sales' ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4, '0')}`;
-    state.invoices.unshift({ ref, kind: view === 'sales' ? 'مبيعات' : 'مشتريات', party: data.party, partyCode: data.partyCode, total, baseTotal, currency, exchangeRate, date });
-    state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4, '0')}`, date, description: view === 'sales' ? `قيد فاتورة مبيعات ${ref}` : `قيد فاتورة مشتريات ${ref}`, debit: baseTotal, credit: baseTotal, currency, exchangeRate, status: 'مرحّل', source: view === 'sales' ? 'SALE' : 'PURCHASE' });
-    const affectedAccount = state.accounts.find(a => view === 'sales' ? a.code === '4101' : a.code === '1101');
-    if (affectedAccount) affectedAccount.balance = Number(affectedAccount.balance || 0) + baseTotal;
-    const item = state.items.find(i => i.code === data.itemCode);
-    if (item && view === 'sales') item.qty = Math.max(0, Number(item.qty) - quantity);
-    if (item && view === 'purchases') item.qty = Number(item.qty) + quantity;
+    const sale = view === 'sales'; const journalLines = sale ? [{ accountCode: '1201', debit: baseTotal, credit: 0 }, { accountCode: '4101', debit: 0, credit: baseTotal }, { accountCode: '5102', debit: costTotal * exchangeRate, credit: 0 }, { accountCode: '1301', debit: 0, credit: costTotal * exchangeRate }] : [{ accountCode: '1301', debit: baseTotal, credit: 0 }, { accountCode: '2101', debit: 0, credit: baseTotal }];
+    state.invoices.unshift({ ref, kind: sale ? 'مبيعات' : 'مشتريات', party: data.party, partyCode: data.partyCode, total, baseTotal, currency, exchangeRate, date, status: 'مرحّل', journalLines, stockMovement: { itemCode: item.code, quantity: sale ? -quantity : quantity, unitCost: sale ? item.cost : price } });
+    state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4, '0')}`, date, description: sale ? `قيد فاتورة مبيعات ${ref}` : `قيد فاتورة مشتريات ${ref}`, debit: baseTotal + (sale ? costTotal * exchangeRate : 0), credit: baseTotal + (sale ? costTotal * exchangeRate : 0), currency, exchangeRate, status: 'مرحّل', source: sale ? 'SALE_INVOICE' : 'PURCHASE_INVOICE' });
+    state.stockMovements = Array.isArray(state.stockMovements) ? state.stockMovements : []; state.stockMovements.unshift({ ref, itemCode: item.code, type: sale ? 'SALE' : 'PURCHASE', quantity: sale ? -quantity : quantity, unitCost: sale ? item.cost : price, date });
+    item.qty = Number(item.qty) + (sale ? -quantity : quantity);
   }
   save();
 }
