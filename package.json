@@ -40,6 +40,7 @@
       "session-context.js",
       "license-core.js",
       "document-cycle-core.js",
+      "oracle/**/*",
       "assets/**/*"
     ],
     "win": {

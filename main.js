@@ -21,10 +21,15 @@ function requirePermission(permission) {
 function requireWritable() {
   if (currentSession?.license?.readOnly) throw new Error('انتهى الترخيص أو أصبح غير صالح. النظام في وضع القراءة فقط.');
 }
+function requireSetupAccess() {
+  if (!currentSession) return;
+  requirePermission('MANAGE_DATABASE');
+  requireWritable();
+}
 function registerDatabaseHandlers() {
-  ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); requireWritable(); return dbSetup.testConnection(payload); });
-  ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.inspectOracleSchema(payload); });
-  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); requireWritable(); return dbSetup.initializeSchema(payload); });
+  ipcMain.handle('db:setup-test', (_event, payload = {}) => { requireSetupAccess(); return dbSetup.testConnection(payload); });
+  ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requireSetupAccess(); return dbSetup.inspectOracleSchema(payload); });
+  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requireSetupAccess(); return dbSetup.initializeSchema(payload); });
   ipcMain.handle('db:test', () => { requirePermission('VIEW_DASHBOARD'); return db.test(); });
   ipcMain.handle('db:dashboard', () => { requirePermission('VIEW_DASHBOARD'); return db.dashboard(); });
   ipcMain.handle('db:accounts', (_event, payload = {}) => { requirePermission('VIEW_ACCOUNTS'); return db.accounts(payload.search || ''); });
