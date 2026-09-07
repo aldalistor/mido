@@ -13,7 +13,7 @@
     "test:db": "node test-db.js",
     "test:journal": "node test-modern-journal.js",
     "test:invoice": "node test-invoice.js",
-    "build:win": "electron-builder --win"
+    "build:win": "node scripts/prepare-win-native.js && electron-builder --win"
   },
   "author": "Onyx Accounting",
   "license": "MIT",
@@ -49,6 +49,7 @@
       "period-close-core.js",
       "access-db.js",
       "create-mdb.ps1",
+      "scripts/prepare-win-native.js",
       "test-stage7-inventory-invoices.js",
       "assets/**/*"
     ],
