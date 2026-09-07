@@ -27,7 +27,7 @@ set -a
 . "${BASE_DIR}/.env"
 set +a
 
-docker cp "${BACKUP_DIR}/${DUMP}" onyx-oracle:/tmp/"${DUMP}"
+docker cp "${BACKUP_DIR}/${DUMP}" "onyx-oracle:/opt/oracle/admin/XE/dpdump/${DUMP}"
 docker exec onyx-oracle bash -lc \
   "impdp system/\"\$ORACLE_PASSWORD\"@XEPDB1 full=y directory=DATA_PUMP_DIR dumpfile=${DUMP} table_exists_action=replace logfile=onyx_restore_${DUMP%.dmp}.log"
 
