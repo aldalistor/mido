@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   setupTestConnection: (payload) => ipcRenderer.invoke('db:setup-test', payload),
   setupInspectSchema: (payload) => ipcRenderer.invoke('db:setup-inspect', payload),
   setupInitializeSchema: (payload) => ipcRenderer.invoke('db:setup-initialize', payload),
+  bootstrapStatus: () => ipcRenderer.invoke('db:bootstrap-status'),
   dbTest: () => ipcRenderer.invoke('db:test'),
   dashboard: () => ipcRenderer.invoke('db:dashboard'),
   accounts: (search = '') => ipcRenderer.invoke('db:accounts', { search }),

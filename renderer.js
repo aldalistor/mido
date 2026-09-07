@@ -650,6 +650,17 @@ async function completeLogin(session) {
 }
 
 async function bootAuthentication() {
+  if (window.onyxAPI?.bootstrapStatus) {
+    try {
+      const bootstrap = await window.onyxAPI.bootstrapStatus();
+      if (!bootstrap.initialized) {
+        $('login-screen').classList.add('hidden');
+        $('bootstrap-screen').classList.remove('hidden');
+        $('bootstrap-fiscal-year').value = String(new Date().getFullYear());
+        return;
+      }
+    } catch (error) { console.warn('تعذر قراءة حالة التأسيس:', error.message); }
+  }
   const online = await refreshDbStatus();
   if (!online) {
     const stored = sessionStorage.getItem('onyx-demo-session');
@@ -663,7 +674,29 @@ async function bootAuthentication() {
     const session = await window.onyxAPI.currentSession(); if (session) { const ready = await continueWithContext(session); if (ready) await completeLogin(ready); }
   } catch (error) { setDemoMode(); $('login-error').textContent = 'تم تفعيل الوضع التجريبي تلقائيًا.'; }
 }
-
+$('bootstrap-form')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const errorBox = $('bootstrap-error');
+  errorBox.textContent = 'جارٍ إنشاء ملف Access والمخطط ودليل الحسابات...';
+  try {
+    await window.onyxAPI.setupInitializeSchema({
+      companyName: $('bootstrap-company-name').value.trim(),
+      companyCode: $('bootstrap-company-code').value.trim().toUpperCase(),
+      branchName: $('bootstrap-branch-name').value.trim(),
+      branchCode: 'MAIN',
+      fiscalYear: Number($('bootstrap-fiscal-year').value),
+      adminUsername: $('bootstrap-admin-username').value.trim().toUpperCase(),
+      adminName: $('bootstrap-admin-name').value.trim(),
+      adminPassword: $('bootstrap-admin-password').value,
+      includeDemoData: false,
+    });
+    $('bootstrap-screen').classList.add('hidden');
+    $('login-screen').classList.remove('hidden');
+    errorBox.textContent = '';
+    dataMode = 'detecting';
+    await bootAuthentication();
+  } catch (error) { errorBox.textContent = `تعذر إنشاء قاعدة البيانات: ${error.message}`; }
+});
 $('login-form')?.addEventListener('submit', async event => {
   event.preventDefault(); const errorBox = $('login-error'); errorBox.textContent = '';
   const username = $('login-username').value.trim(); const password = $('login-password').value;

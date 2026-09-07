@@ -7,6 +7,7 @@ try {
 } catch (error) {
   console.warn(`Access MDB غير متاح حاليًا: ${error.message}`);
   accessDb = {
+    bootstrapStatus: async () => ({ initialized: false, platform: process.platform }),
     test: async () => { throw new Error(`تعذر تحميل موصل Access: ${error.message}`); },
     initialize: async () => { throw new Error(`تعذر تهيئة Access MDB: ${error.message}`); },
   };
@@ -30,7 +31,8 @@ function registerDatabaseHandlers() {
   // Database setup is available before login so a new local MDB can be created on first run.
   ipcMain.handle('db:setup-test', (_event, payload = {}) => db === accessDb ? accessDb.test() : (requirePermission('MANAGE_DATABASE'), dbSetup.testConnection(payload)));
   ipcMain.handle('db:setup-inspect', (_event, payload = {}) => db === accessDb ? accessDb.test() : (requirePermission('MANAGE_DATABASE'), dbSetup.inspectOracleSchema(payload)));
-  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => db === accessDb ? accessDb.initialize() : (requirePermission('MANAGE_DATABASE'), dbSetup.initializeSchema(payload)));
+  ipcMain.handle('db:bootstrap-status', () => db === accessDb ? accessDb.bootstrapStatus() : ({ initialized: true }));
+  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => db === accessDb ? accessDb.initialize(payload) : (requirePermission('MANAGE_DATABASE'), dbSetup.initializeSchema(payload)));
   ipcMain.handle('db:test', () => db.test());
   ipcMain.handle('db:dashboard', () => { requirePermission('VIEW_DASHBOARD'); return db.dashboard(); });
   ipcMain.handle('db:accounts', (_event, payload = {}) => { requirePermission('VIEW_ACCOUNTS'); return db.accounts(payload.search || ''); });

@@ -10,7 +10,7 @@ const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roami
 const dbPath = path.resolve(process.env.ONYX_DB_PATH || path.join(appData, 'Onyx Accounting', 'onyx-local.mdb'));
 const connectionString = () => `Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=${dbPath};`;
 let initialized = false;
-
+let initializationOptions = {};
 const schema = [
   `CREATE TABLE ONYX_COMPANY (COMPANY_ID COUNTER PRIMARY KEY, COMPANY_CODE TEXT(30) NOT NULL, COMPANY_NAME_AR TEXT(200) NOT NULL, BASE_CURRENCY TEXT(3), ACTIVE_FLAG BIT)`,
   `CREATE TABLE ONYX_BRANCH (BRANCH_ID COUNTER PRIMARY KEY, COMPANY_ID LONG NOT NULL, BRANCH_CODE TEXT(30) NOT NULL, BRANCH_NAME_AR TEXT(200) NOT NULL, ACTIVE_FLAG BIT)`,
@@ -152,27 +152,36 @@ async function setup() {
     for (const statement of schema) { try { await connection.query(statement); } catch (error) { if (!/already exists|exists|duplicate/i.test(error.message)) throw error; } }
     const company = rows(await connection.query('SELECT COMPANY_ID FROM ONYX_COMPANY WHERE COMPANY_ID=1'));
     if (!company.length) {
-      await connection.query(`INSERT INTO ONYX_COMPANY (COMPANY_ID,COMPANY_CODE,COMPANY_NAME_AR,BASE_CURRENCY,ACTIVE_FLAG) VALUES (1,'LOCAL','شركة الاختبار المحلية','SAR',1)`);
-      await connection.query(`INSERT INTO ONYX_BRANCH (BRANCH_ID,COMPANY_ID,BRANCH_CODE,BRANCH_NAME_AR,ACTIVE_FLAG) VALUES (1,1,'MAIN','الفرع الرئيسي',1)`);
-      await connection.query(`INSERT INTO ONYX_FISCAL_YEAR (FISCAL_YEAR_ID,COMPANY_ID,FISCAL_YEAR,START_DATE,END_DATE,STATUS_CODE) VALUES (1,1,?, ?, ?, 'OPEN')`, [new Date().getFullYear(), dateValue(`${new Date().getFullYear()}-01-01`), dateValue(`${new Date().getFullYear()}-12-31`)]);
-      await connection.query(`INSERT INTO ONYX_WAREHOUSE (WAREHOUSE_ID,COMPANY_ID,BRANCH_ID,WAREHOUSE_CODE,WAREHOUSE_NAME_AR,ACTIVE_FLAG) VALUES (1,1,1,'MAIN','المستودع الرئيسي',1)`);
+      const options = initializationOptions;
+      const companyCode = options.companyCode || 'LOCAL';
+      const companyName = options.companyName || 'الشركة الرئيسية';
+      const branchCode = options.branchCode || 'MAIN';
+      const branchName = options.branchName || 'الفرع الرئيسي';
+      const fiscalYear = Number(options.fiscalYear) || new Date().getFullYear();
+      const adminUsername = String(options.adminUsername || 'ADMIN').trim().toUpperCase();
+      const adminName = options.adminName || 'مدير النظام';
+      await connection.query(`INSERT INTO ONYX_COMPANY (COMPANY_ID,COMPANY_CODE,COMPANY_NAME_AR,BASE_CURRENCY,ACTIVE_FLAG) VALUES (1,?,?,?,1)`, [companyCode, companyName, options.currency || 'SAR']);
+      await connection.query(`INSERT INTO ONYX_BRANCH (BRANCH_ID,COMPANY_ID,BRANCH_CODE,BRANCH_NAME_AR,ACTIVE_FLAG) VALUES (1,1,?,?,1)`, [branchCode, branchName]);
+      await connection.query(`INSERT INTO ONYX_FISCAL_YEAR (FISCAL_YEAR_ID,COMPANY_ID,FISCAL_YEAR,START_DATE,END_DATE,STATUS_CODE) VALUES (1,1,?, ?, ?, 'OPEN')`, [fiscalYear, dateValue(`${fiscalYear}-01-01`), dateValue(`${fiscalYear}-12-31`)]);
+      await connection.query(`INSERT INTO ONYX_WAREHOUSE (WAREHOUSE_ID,COMPANY_ID,BRANCH_ID,WAREHOUSE_CODE,WAREHOUSE_NAME_AR,ACTIVE_FLAG) VALUES (1,1,1,?,?,1)`, ['MAIN', branchName]);
       await connection.query(`INSERT INTO ONYX_ROLE (ROLE_ID,ROLE_CODE,ROLE_NAME_AR,ACTIVE_FLAG) VALUES (1,'ADMIN','مدير النظام',1)`);
-      await connection.query(`INSERT INTO ONYX_USER (USER_ID,USERNAME,DISPLAY_NAME_AR,PASSWORD_HASH,LANGUAGE_CODE,ACTIVE_FLAG,FAILED_ATTEMPTS) VALUES (1,'ADMIN','مدير النظام',?,'ar',1,0)`, [hashPassword('demo123')]);
+      await connection.query(`INSERT INTO ONYX_USER (USER_ID,USERNAME,DISPLAY_NAME_AR,PASSWORD_HASH,LANGUAGE_CODE,ACTIVE_FLAG,FAILED_ATTEMPTS) VALUES (1,?,?,?,'ar',1,0)`, [adminUsername, adminName, hashPassword(String(options.adminPassword || 'ChangeMe123!'))]);
       await connection.query(`INSERT INTO ONYX_USER_ROLE (USER_ID,ROLE_ID) VALUES (1,1)`);
     }
     for (const account of chartOfAccounts) {
       const existing = rows(await connection.query('SELECT ACCOUNT_ID FROM ONYX_ACCOUNT WHERE COMPANY_ID=1 AND ACCOUNT_CODE=?', [account[0]]));
       if (!existing.length) await connection.query('INSERT INTO ONYX_ACCOUNT (COMPANY_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG) VALUES (1,?,?,?,?,1)', account);
     }
-    await seedDemoData(connection);
+    if (initializationOptions.includeDemoData) await seedDemoData(connection);
     initialized = true;
   } finally { await connection.close(); }
 }
 async function withTransaction(work) { await setup(); const connection = await connect(); try { await connection.beginTransaction(); const result = await work(connection); await connection.commit(); return result; } catch (error) { try { await connection.rollback(); } catch (_) {} throw error; } finally { await connection.close(); } }
 async function nextId(connection, table, field) { const result = rows(await connection.query(`SELECT MAX(${field}) AS LAST_ID FROM ${table}`)); return Number(val(result[0], 'LAST_ID', 0) || 0) + 1; }
 
-async function initialize() { await setup(); return { engine: 'access', initialized: true, version: 'mdb-002-demo-data', path: dbPath, tables: schema.length, demoData: { seedCode: 'DEMO-2026-001', contacts: 3, items: 4, invoices: 3, journalEntries: 1 } }; }
+async function initialize(options = {}) { initializationOptions = { ...options }; await setup(); initializationOptions = {}; return { engine: 'access', initialized: true, version: 'mdb-003-production-bootstrap', path: dbPath, tables: schema.length, demoData: options.includeDemoData ? { seedCode: 'DEMO-2026-001', contacts: 3, items: 4, invoices: 3, journalEntries: 1 } : null }; }
 async function test() { await setup(); return { DB_USER: 'LOCAL', SERVICE_NAME: path.basename(dbPath), ENGINE: 'ACCESS_MDB', DB_PATH: dbPath, engine: 'access' }; }
+async function bootstrapStatus() { return { initialized: fs.existsSync(dbPath), path: dbPath, platform: process.platform }; }
 async function dashboard() { await setup(); const [a,c,j] = await Promise.all([query('SELECT COUNT(*) AS N FROM ONYX_ACCOUNT'), query('SELECT COUNT(*) AS N FROM ONYX_CONTACT'), query("SELECT COUNT(*) AS N FROM ONYX_JOURNAL_ENTRY WHERE STATUS_CODE='POSTED'")]); return { mode: 'access', accounts: Number(val(a[0],'N',0)), customers: Number(val(c[0],'N',0)), journals: Number(val(j[0],'N',0)) }; }
 async function modernAccounts(search = '') { await setup(); const q = `%${String(search).toUpperCase()}%`; const result = await query('SELECT ACCOUNT_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG FROM ONYX_ACCOUNT WHERE COMPANY_ID=1 AND (UCASE(ACCOUNT_CODE) LIKE ? OR UCASE(ACCOUNT_NAME_AR) LIKE ?) ORDER BY ACCOUNT_CODE', [q,q]); return rows(result); }
 async function accounts(search='') { return modernAccounts(search); }
@@ -231,4 +240,4 @@ async function listTradeDocuments(){return [];}
 async function transitionTradeDocument(){throw new Error('غير مدعوم بعد.');}
 async function close(){initialized=false;}
 
-module.exports={initialize,test,dashboard,accounts,customers,journal,financialReports,trialBalanceReport,generalLedgerReport,incomeStatementReport,balanceSheetReport,salesPurchaseReport,inventoryValuationReport,modernAccounts,createModernAccount,modernContacts,modernItems,createModernContact,createModernItem,createModernInvoice,getInvoice,updateInvoice,voidInvoice,listInvoices,listWarehouses,listStockMovements,createTradeDocument,listTradeDocuments,transitionTradeDocument,createCashVoucher,listCashVouchers,updateCashVoucher,voidCashVoucher,createExpenseIncome,listExpenseIncome,updateExpenseIncome,voidExpenseIncome,createReceivablePayment,postReceivablePayment,listReceivablePayments,receivablesAgingReport,listFiscalPeriods,precheckFiscalPeriodClose,closeFiscalPeriod,reopenFiscalPeriod,listPeriodCloseHistory,authenticate,createUser,listUsers,listRoles,assignRole,listSessionContexts,setSessionContext,recordAudit,listAudit,close};
+module.exports={initialize,bootstrapStatus,test,dashboard,accounts,customers,journal,financialReports,trialBalanceReport,generalLedgerReport,incomeStatementReport,balanceSheetReport,salesPurchaseReport,inventoryValuationReport,modernAccounts,createModernAccount,modernContacts,modernItems,createModernContact,createModernItem,createModernInvoice,getInvoice,updateInvoice,voidInvoice,listInvoices,listWarehouses,listStockMovements,createTradeDocument,listTradeDocuments,transitionTradeDocument,createCashVoucher,listCashVouchers,updateCashVoucher,voidCashVoucher,createExpenseIncome,listExpenseIncome,updateExpenseIncome,voidExpenseIncome,createReceivablePayment,postReceivablePayment,listReceivablePayments,receivablesAgingReport,listFiscalPeriods,precheckFiscalPeriodClose,closeFiscalPeriod,reopenFiscalPeriod,listPeriodCloseHistory,authenticate,createUser,listUsers,listRoles,assignRole,listSessionContexts,setSessionContext,recordAudit,listAudit,close};
