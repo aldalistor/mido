@@ -167,7 +167,17 @@ async function createMdbIfNeeded() {
   }
 }
 
-async function connect() { if (backend === 'sqlite') return sqliteConnection(); await createMdbIfNeeded(); return odbc.connect(connectionString()); }
+async function connect() {
+  if (backend === 'sqlite') return sqliteConnection();
+  try {
+    await createMdbIfNeeded();
+    return await odbc.connect(connectionString());
+  } catch (error) {
+    backend = 'sqlite';
+    console.warn(`Access غير متوافق أو غير متاح، تم التبديل إلى SQLite: ${error.message}`);
+    return sqliteConnection();
+  }
+}
 async function query(sql, params = []) { const connection = await connect(); try { return await connection.query(sql, params); } finally { await connection.close(); } }
 async function setup() {
   if (initialized) return;
