@@ -485,11 +485,73 @@ async function renderSecurity() {
 
 function openSecurityUserForm() { $('modal-title').textContent = 'إضافة مستخدم جديد'; $('modal-fields').innerHTML = '<label>اسم المستخدم<input name="username" required /></label><label>الاسم الظاهر<input name="displayNameAr" required /></label><label>كلمة المرور<input name="password" type="password" minlength="8" required /></label><label>الدور<select name="role"><option>مستخدم</option><option>محاسب</option><option>مراجع</option></select></label>'; $('entry-form').dataset.view = 'security-user'; $('form-modal').classList.add('open'); }
 
+let loginContexts = [];
+let pendingContextSession = null;
+
+function contextLabel(context, type) {
+  if (type === 'company') return `${context.COMPANY_CODE || context.company_code} · ${context.COMPANY_NAME_AR || context.company_name_ar}`;
+  if (type === 'branch') return `${context.BRANCH_CODE || context.branch_code} · ${context.BRANCH_NAME_AR || context.branch_name_ar}`;
+  return `${context.FISCAL_YEAR || context.fiscal_year}`;
+}
+
+function fillSelect(select, items, valueKey, labelType, placeholder) {
+  select.innerHTML = `<option value="">${placeholder}</option>` + items.map(item => `<option value="${esc(item[valueKey])}">${esc(contextLabel(item, labelType))}</option>`).join('');
+  select.disabled = items.length === 0;
+}
+
+function prepareContextFields(contexts) {
+  loginContexts = contexts || [];
+  const fields = $('context-fields');
+  const companySelect = $('login-company');
+  const branchSelect = $('login-branch');
+  const yearSelect = $('login-fiscal-year');
+  const companies = [...new Map(loginContexts.map(item => [String(item.COMPANY_ID || item.company_id), item])).values()];
+  fields.classList.remove('hidden');
+  fillSelect(companySelect, companies, 'COMPANY_ID', 'company', 'اختر الشركة');
+  fillSelect(branchSelect, [], 'BRANCH_ID', 'branch', 'اختر الشركة أولًا');
+  fillSelect(yearSelect, [], 'FISCAL_YEAR_ID', 'year', 'اختر الفرع أولًا');
+  companySelect.onchange = () => {
+    const companyId = companySelect.value;
+    const branches = [...new Map(loginContexts.filter(item => String(item.COMPANY_ID) === companyId).map(item => [String(item.BRANCH_ID), item])).values()];
+    fillSelect(branchSelect, branches, 'BRANCH_ID', 'branch', branches.length ? 'اختر الفرع' : 'لا توجد فروع متاحة');
+    fillSelect(yearSelect, [], 'FISCAL_YEAR_ID', 'year', 'اختر الفرع أولًا');
+  };
+  branchSelect.onchange = () => {
+    const companyId = companySelect.value;
+    const branchId = branchSelect.value;
+    const years = loginContexts.filter(item => String(item.COMPANY_ID) === companyId && String(item.BRANCH_ID) === branchId);
+    fillSelect(yearSelect, years, 'FISCAL_YEAR_ID', 'year', years.length ? 'اختر السنة المالية' : 'لا توجد سنوات مفتوحة');
+  };
+  if (companies.length === 1) { companySelect.value = String(companies[0].COMPANY_ID); companySelect.dispatchEvent(new Event('change')); }
+}
+
+async function continueWithContext(session) {
+  if (session.context) return session;
+  const contexts = await window.onyxAPI.sessionContexts();
+  if (!contexts.length) throw new Error('لا يوجد نطاق شركة وفرع وسنة مالية مفتوح لهذا المستخدم.');
+  if (contexts.length === 1) {
+    const only = contexts[0];
+    return window.onyxAPI.setSessionContext({ companyId: only.COMPANY_ID, branchId: only.BRANCH_ID, fiscalYearId: only.FISCAL_YEAR_ID, workingDate: new Date().toISOString().slice(0, 10) });
+  }
+  pendingContextSession = session;
+  prepareContextFields(contexts);
+  $('login-subtitle').textContent = 'اختر سياق العمل لإكمال تسجيل الدخول';
+  document.querySelector('.login-submit').textContent = 'متابعة إلى النظام';
+  return null;
+}
+
 async function completeLogin(session) {
   $('login-screen').classList.add('hidden');
   const name = document.querySelector('.user-mini strong'); const role = document.querySelector('.user-mini span:not(.dots)');
   if (name) name.textContent = session.displayNameAr;
   if (role) role.textContent = session.roles?.[0]?.ROLE_NAME_AR || session.role || 'مستخدم';
+  const company = session.company;
+  if (company) {
+    const workspaceName = document.querySelector('.workspace-name');
+    const workspaceMode = document.querySelector('.workspace-mode');
+    if (workspaceName) workspaceName.innerHTML = `${esc(company.COMPANY_NAME_AR || company.company_name_ar || 'الشركة')} <span>⌄</span>`;
+    if (workspaceMode) workspaceMode.textContent = `فرع ${company.BRANCH_NAME_AR || company.branch_name_ar || 'الرئيسي'} · السنة ${company.FISCAL_YEAR || company.fiscal_year || ''}`;
+  }
   refreshDbStatus(); refreshDashboardMetrics();
 }
 
@@ -503,7 +565,7 @@ async function bootAuthentication() {
   try {
     const hasUsers = await window.onyxAPI.hasUsers();
     if (!hasUsers) { $('login-title').textContent = 'تهيئة مدير النظام'; $('login-subtitle').textContent = 'أنشئ أول مستخدم بصلاحيات كاملة للبدء'; $('setup-fields').classList.remove('hidden'); document.querySelector('.login-submit').textContent = 'إنشاء المدير والدخول'; }
-    const session = await window.onyxAPI.currentSession(); if (session) await completeLogin(session);
+    const session = await window.onyxAPI.currentSession(); if (session) { const ready = await continueWithContext(session); if (ready) await completeLogin(ready); }
   } catch (error) { setDemoMode(); $('login-error').textContent = 'تم تفعيل الوضع التجريبي تلقائيًا.'; }
 }
 
@@ -511,6 +573,18 @@ $('login-form')?.addEventListener('submit', async event => {
   event.preventDefault(); const errorBox = $('login-error'); errorBox.textContent = '';
   const username = $('login-username').value.trim(); const password = $('login-password').value;
   try {
+    if (pendingContextSession) {
+      const companyId = $('login-company').value;
+      const branchId = $('login-branch').value;
+      const fiscalYearId = $('login-fiscal-year').value;
+      if (!companyId || !branchId || !fiscalYearId) throw new Error('اختر الشركة والفرع والسنة المالية قبل المتابعة.');
+      const session = await window.onyxAPI.setSessionContext({ companyId, branchId, fiscalYearId, workingDate: new Date().toISOString().slice(0, 10) });
+      pendingContextSession = null;
+      $('context-fields').classList.add('hidden');
+      await completeLogin(session);
+      showToast(`مرحباً ${session.displayNameAr}`);
+      return;
+    }
     if (dataMode === 'demo') {
       if (!((username.toLowerCase() === 'admin' && password === 'demo123') || state.users.some(u => u.username.toLowerCase() === username.toLowerCase()))) throw new Error('للدخول التجريبي استخدم admin / demo123');
       const user = state.users.find(u => u.username.toLowerCase() === username.toLowerCase()) || state.users[0];
@@ -518,7 +592,9 @@ $('login-form')?.addEventListener('submit', async event => {
       sessionStorage.setItem('onyx-demo-session', JSON.stringify(session)); await completeLogin(session); showToast(`مرحباً ${session.displayNameAr}`); return;
     }
     if (!$('setup-fields').classList.contains('hidden')) { const displayNameAr = $('setup-display').value.trim(); const confirm = $('setup-confirm').value; if (password !== confirm) throw new Error('تأكيد كلمة المرور غير مطابق.'); await window.onyxAPI.createUser({ username, displayNameAr, password }); }
-    const session = await window.onyxAPI.login({ username, password }); await completeLogin(session); showToast(`مرحباً ${session.displayNameAr}`);
+    const authenticated = await window.onyxAPI.login({ username, password });
+    const session = await continueWithContext(authenticated);
+    if (session) { await completeLogin(session); showToast(`مرحباً ${session.displayNameAr}`); }
   } catch (error) { errorBox.textContent = error.message; }
 });
 
