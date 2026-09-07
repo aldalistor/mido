@@ -43,6 +43,7 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;
 const $ = id => document.getElementById(id);
 const toast = $('toast');
 let dataMode = 'detecting';
+let currentView = 'dashboard';
 
 function showToast(message) {
   toast.textContent = message;
@@ -57,6 +58,8 @@ function today() {
 document.querySelector('.top-date').textContent = today();
 
 function switchView(view) {
+  if (currentView !== view) closeForm();
+  currentView = view;
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
   openScreenTab(view);
   document.querySelectorAll('.view').forEach(item => item.classList.remove('active-view'));
@@ -71,7 +74,12 @@ function switchView(view) {
 
 function openScreenTab(view) {
   const tabs = $('screen-tabs');
-  if (!tabs || view === 'dashboard' && tabs.querySelector('[data-view="dashboard"]')) {
+  const existing = tabs?.querySelector(`.screen-tab[data-view="${view}"]`);
+  if (existing) {
+    tabs.querySelectorAll('.screen-tab').forEach(tab => tab.classList.toggle('active', tab === existing));
+    return;
+  }
+  if (!tabs) {
     tabs?.querySelectorAll('.screen-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.view === view));
     return;
   }
