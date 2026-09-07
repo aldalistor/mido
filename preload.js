@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   modernItems: (search = '') => ipcRenderer.invoke('db:modern-items', { search }),
   createItem: (payload) => ipcRenderer.invoke('db:create-item', payload),
   createInvoice: (payload) => ipcRenderer.invoke('db:create-invoice', payload),
+  previewBusinessOperation: (payload) => ipcRenderer.invoke('business:preview', payload),
   createTradeDocument: (payload) => ipcRenderer.invoke('documents:create', payload),
   listTradeDocuments: (payload = {}) => ipcRenderer.invoke('documents:list', payload),
   transitionTradeDocument: (payload) => ipcRenderer.invoke('documents:transition', payload),
