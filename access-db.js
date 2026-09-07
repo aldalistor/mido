@@ -30,7 +30,8 @@ const schema = [
   `CREATE TABLE ONYX_AUDIT_LOG (AUDIT_ID COUNTER PRIMARY KEY, USER_ID LONG, COMPANY_ID LONG, BRANCH_ID LONG, FISCAL_YEAR_ID LONG, ACTION_CODE TEXT(80), ENTITY_TYPE TEXT(80), ENTITY_ID TEXT(80), AFTER_VALUE MEMO, CREATED_AT DATETIME)`,
   `CREATE TABLE ONYX_CASH_VOUCHER (VOUCHER_ID COUNTER PRIMARY KEY, COMPANY_ID LONG, BRANCH_ID LONG, FISCAL_YEAR_ID LONG, VOUCHER_TYPE TEXT(20), VOUCHER_NO TEXT(40), VOUCHER_DATE DATETIME, CASH_ACCOUNT_CODE TEXT(40), TOTAL_AMOUNT DOUBLE, STATUS_CODE TEXT(20), DESCRIPTION_AR TEXT(500))`,
   `CREATE TABLE ONYX_EXPENSE_INCOME (OPERATION_ID COUNTER PRIMARY KEY, COMPANY_ID LONG, BRANCH_ID LONG, FISCAL_YEAR_ID LONG, OPERATION_TYPE TEXT(20), OPERATION_NO TEXT(40), OPERATION_DATE DATETIME, DESCRIPTION_AR TEXT(500), AMOUNT DOUBLE, CASH_ACCOUNT_CODE TEXT(40), CATEGORY_ACCOUNT_CODE TEXT(40), STATUS_CODE TEXT(20))`,
-  `CREATE TABLE ONYX_AR_PAYMENT (PAYMENT_ID COUNTER PRIMARY KEY, COMPANY_ID LONG, BRANCH_ID LONG, FISCAL_YEAR_ID LONG, CONTACT_CODE TEXT(40), PAYMENT_TYPE TEXT(20), PAYMENT_NO TEXT(40), PAYMENT_DATE DATETIME, CASH_ACCOUNT_CODE TEXT(40), AMOUNT DOUBLE, ALLOCATED_AMOUNT DOUBLE, UNAPPLIED_AMOUNT DOUBLE, DESCRIPTION_AR TEXT(500), STATUS_CODE TEXT(20))`
+  `CREATE TABLE ONYX_AR_PAYMENT (PAYMENT_ID COUNTER PRIMARY KEY, COMPANY_ID LONG, BRANCH_ID LONG, FISCAL_YEAR_ID LONG, CONTACT_CODE TEXT(40), PAYMENT_TYPE TEXT(20), PAYMENT_NO TEXT(40), PAYMENT_DATE DATETIME, CASH_ACCOUNT_CODE TEXT(40), AMOUNT DOUBLE, ALLOCATED_AMOUNT DOUBLE, UNAPPLIED_AMOUNT DOUBLE, DESCRIPTION_AR TEXT(500), STATUS_CODE TEXT(20))`,
+  `CREATE TABLE ONYX_SEED_INFO (SEED_CODE TEXT(50) PRIMARY KEY, APPLIED_AT DATETIME)`
 ];
 
 const chartOfAccounts = [
@@ -54,6 +55,75 @@ const chartOfAccounts = [
   ['5206', 'مصروف التسويق والإعلان', 'EXPENSE'], ['5207', 'مصروف الصيانة', 'EXPENSE'],
   ['5208', 'مصروف الإهلاك', 'EXPENSE'], ['5299', 'مصروفات إدارية متنوعة', 'EXPENSE']
 ];
+
+async function seedDemoData(connection) {
+  const marker = rows(await connection.query('SELECT SEED_CODE FROM ONYX_SEED_INFO WHERE SEED_CODE=?', ['DEMO-2026-001']));
+  if (marker.length) return { inserted: false, seedCode: 'DEMO-2026-001' };
+  const contactData = [
+    ['CUST-001', 'عميل تجريبي - مؤسسة النور', 'CUSTOMER', '0500000001'],
+    ['CUST-002', 'عميل تجريبي - شركة الريادة', 'CUSTOMER', '0500000002'],
+    ['VEND-001', 'مورد تجريبي - مؤسسة الإمداد', 'VENDOR', '0500000010']
+  ];
+  const contacts = {};
+  for (const [code, name, type, phone] of contactData) {
+    let found = rows(await connection.query('SELECT CONTACT_ID FROM ONYX_CONTACT WHERE COMPANY_ID=1 AND CODE=?', [code]));
+    if (!found.length) {
+      const id = await nextId(connection, 'ONYX_CONTACT', 'CONTACT_ID');
+      await connection.query('INSERT INTO ONYX_CONTACT (CONTACT_ID,COMPANY_ID,CONTACT_TYPE,CODE,NAME_AR,PHONE,ACTIVE_FLAG) VALUES (?,1,?,?,?,?,1)', [id, type, code, name, phone]);
+      found = [{ CONTACT_ID: id }];
+    }
+    contacts[code] = Number(val(found[0], 'CONTACT_ID'));
+  }
+  const itemData = [
+    ['ITEM-001', 'حاسب محمول تجريبي', 'قطعة', 1800, 2500, 25, 5],
+    ['ITEM-002', 'طابعة مكتبية تجريبية', 'قطعة', 650, 950, 15, 3],
+    ['ITEM-003', 'ورق طباعة A4 تجريبي', 'كرتون', 80, 120, 40, 10],
+    ['ITEM-004', 'حبر طابعة أسود تجريبي', 'عبوة', 90, 150, 30, 5]
+  ];
+  const items = {};
+  for (const [code, name, unit, cost, sale, quantity, reorder] of itemData) {
+    let found = rows(await connection.query('SELECT ITEM_ID FROM ONYX_ITEM WHERE COMPANY_ID=1 AND ITEM_CODE=?', [code]));
+    if (!found.length) {
+      const id = await nextId(connection, 'ONYX_ITEM', 'ITEM_ID');
+      await connection.query('INSERT INTO ONYX_ITEM (ITEM_ID,COMPANY_ID,ITEM_CODE,ITEM_NAME_AR,UNIT_NAME,COST_PRICE,SALE_PRICE,QUANTITY,REORDER_LEVEL,ACTIVE_FLAG) VALUES (?,1,?,?,?,?,?,?,?,1)', [id, code, name, unit, cost, sale, quantity, reorder]);
+      found = [{ ITEM_ID: id }];
+    }
+    items[code] = Number(val(found[0], 'ITEM_ID'));
+  }
+  const addInvoice = async ({ type, no, contactCode, date, lines, paymentMethod, paid }) => {
+    let existing = rows(await connection.query('SELECT INVOICE_ID FROM ONYX_INVOICE WHERE COMPANY_ID=1 AND INVOICE_NO=?', [no]));
+    if (existing.length) return Number(val(existing[0], 'INVOICE_ID'));
+    const invoiceId = await nextId(connection, 'ONYX_INVOICE', 'INVOICE_ID');
+    const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+    const tax = Math.round(subtotal * 0.15 * 100) / 100;
+    const total = subtotal + tax;
+    const outstanding = Math.max(0, total - paid);
+    await connection.query('INSERT INTO ONYX_INVOICE (INVOICE_ID,COMPANY_ID,BRANCH_ID,FISCAL_YEAR_ID,INVOICE_TYPE,INVOICE_NO,CONTACT_ID,INVOICE_DATE,SUBTOTAL,DISCOUNT_AMOUNT,TAX_AMOUNT,TOTAL_AMOUNT,PAYMENT_METHOD,PAID_AMOUNT,OUTSTANDING_AMOUNT,STATUS_CODE,CURRENCY_CODE,EXCHANGE_RATE) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [invoiceId, 1, 1, 1, type, no, contacts[contactCode], dateValue(date), subtotal, 0, tax, total, paymentMethod, paid, outstanding, 'POSTED', 'SAR', 1]);
+    for (const line of lines) {
+      const lineId = await nextId(connection, 'ONYX_INVOICE_LINE', 'LINE_ID');
+      const item = rows(await connection.query('SELECT COST_PRICE FROM ONYX_ITEM WHERE ITEM_ID=?', [items[line.itemCode]]));
+      await connection.query('INSERT INTO ONYX_INVOICE_LINE (LINE_ID,INVOICE_ID,ITEM_ID,QUANTITY,UNIT_PRICE,UNIT_COST,DISCOUNT_AMOUNT,LINE_TOTAL) VALUES (?,?,?,?,?,?,?,?)', [lineId, invoiceId, items[line.itemCode], line.quantity, line.unitPrice, Number(val(item[0], 'COST_PRICE', 0)), 0, line.quantity * line.unitPrice]);
+      const movementId = await nextId(connection, 'ONYX_STOCK_MOVEMENT', 'MOVEMENT_ID');
+      const movementQuantity = type === 'SALE' ? -line.quantity : line.quantity;
+      await connection.query('INSERT INTO ONYX_STOCK_MOVEMENT (MOVEMENT_ID,COMPANY_ID,BRANCH_ID,WAREHOUSE_ID,ITEM_ID,INVOICE_ID,MOVEMENT_TYPE,QUANTITY,UNIT_COST,MOVEMENT_DATE) VALUES (?,1,1,1,?,?,?,?,?,?,?)', [movementId, items[line.itemCode], invoiceId, type, movementQuantity, Number(val(item[0], 'COST_PRICE', 0)), dateValue(date)]);
+      await connection.query('UPDATE ONYX_ITEM SET QUANTITY=QUANTITY+? WHERE ITEM_ID=?', [movementQuantity, items[line.itemCode]]);
+    }
+    return invoiceId;
+  };
+  await addInvoice({ type: 'SALE', no: 'DEMO-S-0001', contactCode: 'CUST-001', date: '2026-01-15', paymentMethod: 'CASH', paid: 1828.5, lines: [{ itemCode: 'ITEM-001', quantity: 3, unitPrice: 2500 }, { itemCode: 'ITEM-002', quantity: 2, unitPrice: 950 }] });
+  await addInvoice({ type: 'SALE', no: 'DEMO-S-0002', contactCode: 'CUST-002', date: '2026-02-10', paymentMethod: 'CREDIT', paid: 0, lines: [{ itemCode: 'ITEM-003', quantity: 5, unitPrice: 120 }, { itemCode: 'ITEM-004', quantity: 4, unitPrice: 150 }] });
+  await addInvoice({ type: 'PURCHASE', no: 'DEMO-P-0001', contactCode: 'VEND-001', date: '2026-01-05', paymentMethod: 'TRANSFER', paid: 5290, lines: [{ itemCode: 'ITEM-001', quantity: 10, unitPrice: 1800 }, { itemCode: 'ITEM-003', quantity: 20, unitPrice: 80 }] });
+  const journalId = await nextId(connection, 'ONYX_JOURNAL_ENTRY', 'ENTRY_ID');
+  await connection.query('INSERT INTO ONYX_JOURNAL_ENTRY (ENTRY_ID,COMPANY_ID,BRANCH_ID,FISCAL_YEAR_ID,ENTRY_NO,ENTRY_DATE,DESCRIPTION_AR,STATUS_CODE,SOURCE_CODE) VALUES (?,1,1,1,?, ?, ?,\'POSTED\',\'DEMO\')', [journalId, 'DEMO-JV-0001', dateValue('2026-01-01'), 'قيد افتتاحي تجريبي']);
+  const openingLines = [['1101', 50000, 0], ['1102', 25000, 0], ['3101', 0, 75000]];
+  for (const [accountCode, debit, credit] of openingLines) {
+    const account = rows(await connection.query('SELECT ACCOUNT_ID FROM ONYX_ACCOUNT WHERE ACCOUNT_CODE=?', [accountCode]));
+    const lineId = await nextId(connection, 'ONYX_JOURNAL_LINE', 'LINE_ID');
+    await connection.query('INSERT INTO ONYX_JOURNAL_LINE (LINE_ID,ENTRY_ID,ACCOUNT_ID,LINE_DESCRIPTION_AR,DEBIT,CREDIT) VALUES (?,?,?,?,?,?)', [lineId, journalId, Number(val(account[0], 'ACCOUNT_ID')), 'رصيد افتتاحي تجريبي', debit, credit]);
+  }
+  await connection.query('INSERT INTO ONYX_SEED_INFO (SEED_CODE,APPLIED_AT) VALUES (?,?)', ['DEMO-2026-001', new Date()]);
+  return { inserted: true, seedCode: 'DEMO-2026-001', contacts: 3, items: 4, invoices: 3, journalEntries: 1 };
+}
 
 function dateValue(value) { return value ? new Date(String(value).slice(0, 10) + 'T12:00:00') : new Date(); }
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -94,13 +164,14 @@ async function setup() {
       const existing = rows(await connection.query('SELECT ACCOUNT_ID FROM ONYX_ACCOUNT WHERE COMPANY_ID=1 AND ACCOUNT_CODE=?', [account[0]]));
       if (!existing.length) await connection.query('INSERT INTO ONYX_ACCOUNT (COMPANY_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG) VALUES (1,?,?,?,?,1)', account);
     }
+    await seedDemoData(connection);
     initialized = true;
   } finally { await connection.close(); }
 }
 async function withTransaction(work) { await setup(); const connection = await connect(); try { await connection.beginTransaction(); const result = await work(connection); await connection.commit(); return result; } catch (error) { try { await connection.rollback(); } catch (_) {} throw error; } finally { await connection.close(); } }
 async function nextId(connection, table, field) { const result = rows(await connection.query(`SELECT MAX(${field}) AS LAST_ID FROM ${table}`)); return Number(val(result[0], 'LAST_ID', 0) || 0) + 1; }
 
-async function initialize() { await setup(); return { engine: 'access', initialized: true, version: 'mdb-001', path: dbPath, tables: schema.length }; }
+async function initialize() { await setup(); return { engine: 'access', initialized: true, version: 'mdb-002-demo-data', path: dbPath, tables: schema.length, demoData: { seedCode: 'DEMO-2026-001', contacts: 3, items: 4, invoices: 3, journalEntries: 1 } }; }
 async function test() { await setup(); return { DB_USER: 'LOCAL', SERVICE_NAME: path.basename(dbPath), ENGINE: 'ACCESS_MDB', DB_PATH: dbPath, engine: 'access' }; }
 async function dashboard() { await setup(); const [a,c,j] = await Promise.all([query('SELECT COUNT(*) AS N FROM ONYX_ACCOUNT'), query('SELECT COUNT(*) AS N FROM ONYX_CONTACT'), query("SELECT COUNT(*) AS N FROM ONYX_JOURNAL_ENTRY WHERE STATUS_CODE='POSTED'")]); return { mode: 'access', accounts: Number(val(a[0],'N',0)), customers: Number(val(c[0],'N',0)), journals: Number(val(j[0],'N',0)) }; }
 async function modernAccounts(search = '') { await setup(); const q = `%${String(search).toUpperCase()}%`; const result = await query('SELECT ACCOUNT_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG FROM ONYX_ACCOUNT WHERE COMPANY_ID=1 AND (UCASE(ACCOUNT_CODE) LIKE ? OR UCASE(ACCOUNT_NAME_AR) LIKE ?) ORDER BY ACCOUNT_CODE', [q,q]); return rows(result); }
