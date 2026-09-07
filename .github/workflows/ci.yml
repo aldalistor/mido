@@ -2,7 +2,7 @@ name: Mido Accounting CI
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, development, 'feat/**']
   pull_request:
     branches: [main]
 
