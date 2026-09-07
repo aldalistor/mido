@@ -235,8 +235,9 @@ function renderModule(view) {
   };
   const config = configs[view] || configs.reports;
   const rows = localRows(view);
-  $('generic-content').innerHTML = `<div class="module-toolbar"><div><p class="eyebrow">إدارة ${esc(labels[view])}</p><h2>${esc(labels[view])}</h2></div><button class="primary-button" id="module-action">＋ ${esc(config.action)}</button></div><div class="panel module-panel"><div class="table-tools"><input id="module-search" placeholder="ابحث في ${esc(labels[view])}..." /><span>${rows.length} سجل${dataMode === 'demo' ? ' · تجريبي' : ''}</span></div><div class="table-scroll"><table><thead><tr>${config.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody id="module-body">${renderRows(rows)}</tbody></table></div></div>`;
+  $('generic-content').innerHTML = `<div class="module-toolbar"><div><p class="eyebrow">إدارة ${esc(labels[view])}</p><h2>${esc(labels[view])}</h2></div><div class="toolbar-actions"><button class="secondary-button" id="module-report">⇩ تقرير ${esc(labels[view])}</button><button class="primary-button" id="module-action">＋ ${esc(config.action)}</button></div></div><div class="panel module-panel"><div class="table-tools"><input id="module-search" placeholder="ابحث في ${esc(labels[view])}..." /><span>${rows.length} سجل${dataMode === 'demo' ? ' · تجريبي' : ''}</span></div><div class="table-scroll"><table><thead><tr>${config.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody id="module-body">${renderRows(rows)}</tbody></table></div></div>`;
   $('module-action').addEventListener('click', () => view === 'reports' ? showToast('تم تحديث التقارير التجريبية') : openForm(view));
+  $('module-report').addEventListener('click', () => showToast(`تم تجهيز تقرير ${labels[view]} للفترة الحالية`));
   $('module-search').addEventListener('input', event => {
     const q = event.target.value.toLowerCase();
     $('module-body').innerHTML = renderRows(rows.filter(row => row.join(' ').toLowerCase().includes(q)));
@@ -248,8 +249,8 @@ function openForm(view) {
   const form = $('form-modal');
   $('modal-title').textContent = titles[view] || 'سجل جديد';
   if (view === 'sales') {
-    $('modal-fields').innerHTML = `<label>اسم العميل<input name="party" placeholder="ابحث أو اكتب اسم العميل" required /></label><div class="item-lookup-field"><label>الصنف</label><input id="sales-item-search" autocomplete="off" placeholder="ابحث بالاسم أو الرقم أو أي حرف..." /><input name="itemCode" id="sales-item-code" type="hidden" required /><div id="sales-item-results" class="item-search-results"></div><div id="sales-item-preview" class="selected-item-preview"><span>▤</span><div><strong>لم يتم اختيار صنف</strong><small>ابدأ بكتابة اسم الصنف أو رمزه</small></div></div></div><label>الكمية<input name="quantity" type="number" min="0.01" step="0.01" value="1" required /></label><label>سعر البيع<input name="unitPrice" id="sales-unit-price" type="number" min="0" step="0.01" required /></label><div class="sales-entry-summary"><span>التكلفة: <b id="sales-item-cost">—</b></span><span>المتاح: <b id="sales-item-stock">—</b></span><strong>الإجمالي: <b id="sales-item-total">0 ر.س</b></strong></div>`;
-    form.dataset.view = view; form.classList.add('open'); setupSalesItemLookup(); return;
+    $('modal-fields').innerHTML = `<div class="customer-lookup-field"><label>العميل</label><div class="lookup-inline"><input name="party" id="sales-customer-search" autocomplete="off" placeholder="ابحث باسم العميل أو رقمه..." required /><button type="button" id="add-customer-inline" class="lookup-add">＋ عميل</button></div><input name="customerCode" id="sales-customer-code" type="hidden" /><div id="sales-customer-results" class="customer-search-results"></div><div id="sales-customer-preview" class="customer-balance-preview"><span>♙</span><div><strong>لم يتم اختيار عميل</strong><small>سيظهر رصيد العميل عند اختياره</small></div><b>الرصيد: —</b></div></div><div class="item-lookup-field"><div class="lookup-label-row"><label>الصنف</label><button type="button" id="add-item-inline" class="lookup-add">＋ صنف جديد</button></div><input id="sales-item-search" autocomplete="off" placeholder="ابحث بالاسم أو الرقم أو أي حرف..." /><input name="itemCode" id="sales-item-code" type="hidden" required /><div id="sales-item-results" class="item-search-results"></div><div id="sales-item-preview" class="selected-item-preview"><span>▤</span><div><strong>لم يتم اختيار صنف</strong><small>ابدأ بكتابة اسم الصنف أو رمزه</small></div></div></div><label>الكمية<input name="quantity" type="number" min="0.01" step="0.01" value="1" required /></label><label>سعر البيع<input name="unitPrice" id="sales-unit-price" type="number" min="0" step="0.01" required /></label><div class="sales-entry-summary"><span>التكلفة: <b id="sales-item-cost">—</b></span><span>المتاح: <b id="sales-item-stock">—</b></span><strong>الإجمالي: <b id="sales-item-total">0 ر.س</b></strong></div>`;
+    form.dataset.view = view; form.classList.add('open'); setupSalesCustomerLookup(); setupSalesItemLookup(); $('add-customer-inline').addEventListener('click', () => { closeForm(); openForm('contacts'); }); $('add-item-inline').addEventListener('click', () => { closeForm(); openForm('inventory'); }); return;
   }
   const fields = {
     journal: [['description', 'البيان'], ['debitAccount', 'الحساب المدين'], ['creditAccount', 'الحساب الدائن'], ['amount', 'المبلغ', 'number']],
@@ -262,6 +263,15 @@ function openForm(view) {
   $('modal-fields').innerHTML = fields.map(([name, label, type = 'text']) => `<label>${label}<input name="${name}" type="${type}" step="0.01" required /></label>`).join('');
   form.dataset.view = view;
   form.classList.add('open');
+}
+
+function customerBalance(customer) { return state.invoices.filter(i => i.kind === 'مبيعات' && (i.party === customer.name || i.party === customer.code)).reduce((sum, i) => sum + Number(i.total || 0), 0); }
+
+function setupSalesCustomerLookup() {
+  const search = $('sales-customer-search'); const results = $('sales-customer-results'); const code = $('sales-customer-code'); const preview = $('sales-customer-preview');
+  const selectCustomer = customerCode => { const customer = state.contacts.find(c => c.code === customerCode); if (!customer) return; const balance = customerBalance(customer); code.value = customer.code; search.value = `${customer.name} · ${customer.code}`; preview.innerHTML = `<span class="customer-selected-icon">✓</span><div><strong>${esc(customer.name)}</strong><small>${esc(customer.code)} · ${esc(customer.phone || 'بدون هاتف')}</small></div><b>الرصيد: ${money(balance)}</b>`; results.classList.remove('visible'); };
+  const render = () => { const q = search.value.trim().toLowerCase(); const customers = state.contacts.filter(c => c.type === 'عميل' && `${c.code} ${c.name} ${c.phone || ''}`.toLowerCase().includes(q)).slice(0, 8); results.innerHTML = customers.length ? customers.map(c => `<button type="button" class="customer-result" data-customer-code="${esc(c.code)}"><span class="customer-result-icon">♙</span><span><strong>${esc(c.name)}</strong><small>${esc(c.code)} · ${esc(c.phone || 'بدون هاتف')}</small></span><b>الرصيد ${money(customerBalance(c))}</b></button>`).join('') : '<div class="item-no-results">لا توجد نتائج عملاء مطابقة</div>'; results.classList.add('visible'); results.querySelectorAll('.customer-result').forEach(button => button.addEventListener('click', () => selectCustomer(button.dataset.customerCode))); };
+  search.addEventListener('focus', render); search.addEventListener('input', render); document.addEventListener('click', event => { if (!event.target.closest('.customer-lookup-field')) results.classList.remove('visible'); }, { once: true });
 }
 
 function setupSalesItemLookup() {
@@ -325,7 +335,7 @@ $('entry-form').addEventListener('submit', async event => {
       else if (view === 'inventory') await window.onyxAPI.createItem({ code: data.code, name: data.name, unit: data.unit, quantity: data.qty, cost: data.cost, sale: data.sale });
       else if (view === 'contacts') await window.onyxAPI.createContact({ code: data.code, name: data.name, type: data.type.includes('مورد') ? 'VENDOR' : 'CUSTOMER', phone: data.phone, email: data.email });
       else if (view === 'journal') await window.onyxAPI.createJournal({ description: data.description, lines: [{ accountCode: data.debitAccount, debit: Number(data.amount), credit: 0 }, { accountCode: data.creditAccount, debit: 0, credit: Number(data.amount) }] });
-      else if (view === 'sales' || view === 'purchases') await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.party, lines: [{ itemCode: data.itemCode, quantity: Number(data.quantity), unitPrice: Number(data.unitPrice) }] });
+      else if (view === 'sales' || view === 'purchases') await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.customerCode || data.party, lines: [{ itemCode: data.itemCode, quantity: Number(data.quantity), unitPrice: Number(data.unitPrice) }] });
     } else {
       await submitLocal(view, data);
     }
