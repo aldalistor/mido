@@ -26,8 +26,9 @@ async function ensureDatabaseFile(filePath) {
   if (fs.existsSync(filePath)) return filePath;
   if (process.platform !== 'win32') throw new Error('إنشاء ملف Access تلقائيًا متاح على Windows فقط.');
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const script = "$cat = New-Object -ComObject ADOX.Catalog; $cat.Create('Provider=Microsoft.ACE.OLEDB.12.0;Data Source=' + $args[0] + ';Jet OLEDB:Engine Type=5');";
-  try { await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script, filePath], { windowsHide: true }); }
+  const escapedPath = filePath.replace(/'/g, "''");
+  const script = `$target = '${escapedPath}'; $cat = New-Object -ComObject ADOX.Catalog; $cat.Create(('Provider=Microsoft.ACE.OLEDB.12.0;Data Source=' + $target + ';Jet OLEDB:Engine Type=5'));`;
+  try { await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true }); }
   catch (error) { throw new Error(`تعذر إنشاء ملف Access تلقائيًا: ${error.message}`); }
   if (!fs.existsSync(filePath)) throw new Error('لم يتم إنشاء ملف Access. ثبّت Microsoft Access Database Engine 2016 64-bit.');
   return filePath;
