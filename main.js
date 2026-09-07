@@ -2,10 +2,13 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
+const dbSetup = require('./db-setup');
 
 let currentSession = null;
 function requirePermission(permission) { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); if (!currentSession.permissions.includes(permission) && !currentSession.permissions.includes('MANAGE_USERS')) throw new Error('لا تملك صلاحية تنفيذ هذه العملية.'); }
 function registerDatabaseHandlers() {
+  ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.testConnection(payload); });
+  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.initializeSchema(payload); });
   ipcMain.handle('db:test', () => db.test());
   ipcMain.handle('db:dashboard', () => db.dashboard());
   ipcMain.handle('db:accounts', (_event, payload = {}) => db.accounts(payload.search || ''));

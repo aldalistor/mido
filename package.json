@@ -32,6 +32,7 @@
       "renderer.js",
       "preload.js",
       "db.js",
+      "db-setup.js",
       "assets/**/*"
     ],
     "win": {
