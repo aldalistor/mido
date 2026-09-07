@@ -8,7 +8,7 @@
     "dev": "electron .",
     "test": "npm run test:syntax && npm run test:core",
     "test:syntax": "node --check main.js && node --check preload.js && node --check renderer.js && node --check db.js",
-    "test:core": "node test-accounting-core.js && node test-invoice-posting-core.js && node test-session-context.js",
+    "test:core": "node test-accounting-core.js && node test-invoice-posting-core.js && node test-session-context.js && node test-document-cycle-core.js",
     "test:db": "node test-db.js",
     "test:journal": "node test-modern-journal.js",
     "test:invoice": "node test-invoice.js",
@@ -37,6 +37,7 @@
       "accounting-core.js",
       "invoice-posting-core.js",
       "session-context.js",
+      "document-cycle-core.js",
       "assets/**/*"
     ],
     "win": {
