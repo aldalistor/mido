@@ -45,6 +45,8 @@ const toast = $('toast');
 let dataMode = 'detecting';
 let currentView = 'dashboard';
 let pendingInvoiceEditId = '';
+const dashboardCache = { data: null, fetchedAt: 0, request: null };
+const DASHBOARD_CACHE_TTL_MS = 30_000;
 
 function showToast(message) {
   toast.textContent = message;
@@ -462,7 +464,7 @@ $('entry-form').addEventListener('submit', async event => {
     } else {
       await submitLocal(view, data);
     }
-    $('entry-form').dataset.editingInvoiceId = ''; closeForm(); renderModule(view); refreshDashboardMetrics(); showToast(dataMode === 'demo' ? 'تم الحفظ في الوضع التجريبي' : 'تم حفظ السجل بنجاح');
+    $('entry-form').dataset.editingInvoiceId = ''; closeForm(); renderModule(view); refreshDashboardMetrics(true); showToast(dataMode === 'demo' ? 'تم الحفظ في الوضع التجريبي' : 'تم حفظ السجل بنجاح');
   } catch (error) {
     if (dataMode === 'oracle') {
       console.error('Oracle write failed; no demo fallback was performed:', error);
@@ -474,7 +476,7 @@ $('entry-form').addEventListener('submit', async event => {
 document.querySelectorAll('[data-view]').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
 $('new-entry').addEventListener('click', () => { switchView('journal'); setTimeout(() => openForm('journal'), 0); });
 $('hero-new-entry')?.addEventListener('click', () => { switchView('journal'); setTimeout(() => openForm('journal'), 0); });
-$('refresh-dashboard')?.addEventListener('click', async () => { await refreshDbStatus(); await refreshDashboardMetrics(); showToast('تم تحديث مؤشرات لوحة التحكم'); });
+$('refresh-dashboard')?.addEventListener('click', async () => { await refreshDbStatus(); await refreshDashboardMetrics(true); showToast('تم تحديث مؤشرات لوحة التحكم'); });
 $('global-search')?.addEventListener('click', () => showToast('استخدم البحث داخل الوحدة للوصول السريع'));
 $('generic-action').addEventListener('click', () => openForm('journal'));
 document.querySelectorAll('.quick-actions button').forEach(button => button.addEventListener('click', () => { switchView(button.dataset.view); setTimeout(() => { if (button.dataset.view !== 'dashboard') openForm(button.dataset.view); }, 0); }));
@@ -520,16 +522,30 @@ async function loadLiveRows(view) {
   } catch (error) { console.warn('Oracle module read unavailable:', error.message); }
 }
 
-async function refreshDashboardMetrics() {
+async function refreshDashboardMetrics(force = false) {
   const cards = document.querySelectorAll('.metric-card>strong');
   if (dataMode === 'oracle' && window.onyxAPI?.dashboard) {
     try {
-      const data = await window.onyxAPI.dashboard();
+      const cacheIsFresh = dashboardCache.data && Date.now() - dashboardCache.fetchedAt < DASHBOARD_CACHE_TTL_MS;
+      if (!force && cacheIsFresh) {
+        const data = dashboardCache.data;
+        if (cards[0]) cards[0].innerHTML = `${Number(data.journals || 0).toLocaleString('ar-SA')} <small>عملية</small>`;
+        if (cards[1]) cards[1].innerHTML = `${Number(data.accounts || 0).toLocaleString('ar-SA')} <small>حساب</small>`;
+        if (cards[2]) cards[2].innerHTML = `${Number(data.customers || 0).toLocaleString('ar-SA')} <small>جهة</small>`;
+        return;
+      }
+      if (force) dashboardCache.data = null;
+      if (!dashboardCache.request) dashboardCache.request = window.onyxAPI.dashboard();
+      const data = await dashboardCache.request;
+      dashboardCache.data = data;
+      dashboardCache.fetchedAt = Date.now();
+      dashboardCache.request = null;
       if (cards[0]) cards[0].innerHTML = `${Number(data.journals || 0).toLocaleString('ar-SA')} <small>عملية</small>`;
       if (cards[1]) cards[1].innerHTML = `${Number(data.accounts || 0).toLocaleString('ar-SA')} <small>حساب</small>`;
       if (cards[2]) cards[2].innerHTML = `${Number(data.customers || 0).toLocaleString('ar-SA')} <small>جهة</small>`;
       return;
     } catch (error) {
+      dashboardCache.request = null;
       console.error('Oracle dashboard read failed; demo metrics were not shown:', error);
       showToast('تعذر تحديث مؤشرات Oracle. لم تُعرض مؤشرات تجريبية بدلًا منها.');
       return;
