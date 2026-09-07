@@ -18,7 +18,7 @@ function permissionsForRole(role) {
 
 function can(permissions, permission) {
   const granted = normalizePermissions(permissions);
-  return granted.has('*') || granted.has(String(permission).toUpperCase());
+  return granted.has('*') || granted.has('ALL') || granted.has(String(permission).toUpperCase());
 }
 
 function assertCan(permissions, permission) {
