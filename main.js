@@ -4,9 +4,17 @@ const crypto = require('crypto');
 const db = require('./db');
 const dbSetup = require('./db-setup');
 const sessionContext = require('./session-context');
+const commercialLicense = require('./commercial-license-core');
 
 let currentSession = null;
-function requirePermission(permission) { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); if (!currentSession.permissions.includes(permission) && !currentSession.permissions.includes('MANAGE_USERS')) throw new Error('لا تملك صلاحية تنفيذ هذه العملية.'); }
+function requirePermission(permission) { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); const granted = (currentSession.permissions || []).map(value => String(value).toUpperCase()); if (!granted.includes(String(permission).toUpperCase()) && !granted.includes('ALL') && !granted.includes('MANAGE_USERS')) throw new Error('لا تملك صلاحية تنفيذ هذه العملية.'); }
+function enforceCommercialLicense(feature) {
+  const raw = String(process.env.MIDO_LICENSE_JSON || '').trim();
+  if (!raw) return { state: 'DEMO', reason: 'NO_LICENSE_CONFIGURED' };
+  let license;
+  try { license = JSON.parse(raw); } catch (_) { throw new Error('إعداد الترخيص التجاري غير صالح.'); }
+  return commercialLicense.enforceEntitlement({ license, feature, currentUsers: 1, currentBranches: 1, options: { today: new Date().toISOString().slice(0, 10), publicKey: process.env.MIDO_LICENSE_PUBLIC_KEY || null } });
+}
 function registerDatabaseHandlers() {
   ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.testConnection(payload); });
   ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.inspectOracleSchema(payload); });
@@ -20,7 +28,7 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:create-contact', async (_event, payload = {}) => { requirePermission('MANAGE_CONTACTS'); const result = await db.createModernContact({ ...payload, userId: currentSession.userId }); await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'CREATE_CONTACT', entityType: 'CONTACT', entityId: result.contactId || result.code, afterValue: result }); return result; });
   ipcMain.handle('db:modern-items', (_event, payload = {}) => { requirePermission('VIEW_INVENTORY'); return db.modernItems(payload.search || ''); });
   ipcMain.handle('db:create-item', async (_event, payload = {}) => { requirePermission('MANAGE_INVENTORY'); const result = await db.createModernItem({ ...payload, userId: currentSession.userId }); await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'CREATE_ITEM', entityType: 'ITEM', entityId: result.itemId || result.code, afterValue: result }); return result; });
-  ipcMain.handle('db:create-invoice', async (_event, payload = {}) => { requirePermission('CREATE_INVOICES'); requirePermission('POST_JOURNALS'); const result = await db.createModernInvoice({ ...payload, userId: currentSession.userId }); await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'POST_INVOICE', entityType: 'INVOICE', entityId: result.invoiceId, afterValue: result }); return result; });
+  ipcMain.handle('db:create-invoice', async (_event, payload = {}) => { requirePermission('CREATE_INVOICES'); requirePermission('POST_JOURNALS'); enforceCommercialLicense(payload.type === 'PURCHASE' ? 'PURCHASES' : 'INVOICING'); const result = await db.createModernInvoice({ ...payload, context: currentSession.context || {}, permissions: currentSession.permissions || [], userId: currentSession.userId }); await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'POST_INVOICE', entityType: 'INVOICE', entityId: result.invoiceId, afterValue: result }); return result; });
   ipcMain.handle('documents:create', async (_event, payload = {}) => { requirePermission(payload.documentType?.includes('ORDER') ? 'CREATE_ORDERS' : 'CREATE_INVOICES'); const result = await db.createTradeDocument({ ...payload, userId: currentSession.userId }); await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'CREATE_TRADE_DOCUMENT', entityType: payload.documentType || 'TRADE_DOCUMENT', entityId: result.documentId, afterValue: result }); return result; });
   ipcMain.handle('documents:list', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.listTradeDocuments(payload); });
   ipcMain.handle('documents:transition', async (_event, payload = {}) => { requirePermission(payload.nextStatus === 'POSTED' ? 'POST_JOURNALS' : 'CREATE_ORDERS'); return db.transitionTradeDocument({ ...payload, userId: currentSession.userId }); });
