@@ -74,7 +74,17 @@ function today() {
   return new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(new Date());
 }
 
+function isoToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function monthStart() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+}
+
 document.querySelector('.top-date').textContent = today();
+
 
 function switchView(view) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
@@ -349,10 +359,12 @@ function openForm(view) {
     const partyLabel = isSales ? 'العميل' : 'المورد';
     const partyPlaceholder = isSales ? 'ابحث باسم العميل أو رقمه...' : 'ابحث باسم المورد أو رقمه...';
     const partyButton = isSales ? '＋ عميل' : '＋ مورد';
-    $('modal-fields').innerHTML = `<div class="invoice-workflow-header"><div><span class="section-kicker">دورة المستند</span><strong>${isSales ? 'مبيعات' : 'مشتريات'} · مستند جديد</strong><small>مسودة قابلة للاعتماد والترحيل</small></div><div class="invoice-shortcuts"><span class="invoice-status-pill draft">مسودة</span><kbd>F9</kbd><small>بحث</small><kbd>Ctrl+S</kbd><small>حفظ</small><kbd>Ctrl+Shift+N</kbd><small>بند</small><kbd>Esc</kbd><small>إغلاق</small></div></div><div class="customer-lookup-field invoice-party-block"><label>${partyLabel}</label><div class="lookup-inline"><input name="party" id="invoice-party-search" autocomplete="off" placeholder="${partyPlaceholder}" required /><button type="button" id="add-party-inline" class="lookup-add">${partyButton}</button></div><input name="partyCode" id="invoice-party-code" type="hidden" /><div id="invoice-party-results" class="customer-search-results"></div><div id="invoice-party-preview" class="customer-balance-preview"><span>♙</span><div><strong>لم يتم اختيار ${partyLabel}</strong><small>سيظهر الرصيد عند اختياره</small></div><b>الرصيد: —</b></div></div><label>نوع المستند<select name="documentType" id="invoice-document-type">${(isSales ? [['SALES_ORDER','أمر بيع'],['DELIVERY_NOTE','إذن تسليم'],['SALES_INVOICE','فاتورة مبيعات'],['SALES_RETURN','مردود مبيعات']] : [['PURCHASE_ORDER','أمر شراء'],['RECEIPT_NOTE','إذن استلام'],['PURCHASE_INVOICE','فاتورة مشتريات'],['PURCHASE_RETURN','مردود مشتريات']]).map(([value, label]) => `<option value="${value}" ${value === (isSales ? 'SALES_INVOICE' : 'PURCHASE_INVOICE') ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>تاريخ المستند<input name="invoiceDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label><label>العملة<select name="currency" id="invoice-currency">${currencies.map(c => `<option value="${c.code}">${c.name} (${c.symbol})</option>`).join('')}</select></label><label>سعر الصرف<input name="exchangeRate" id="invoice-rate" type="number" min="0.000001" step="0.000001" value="1" required /></label><label>طريقة الدفع<select name="paymentMethod"><option value="CASH">نقدًا</option><option value="CREDIT">آجل</option><option value="CHEQUE">شيك</option><option value="TRANSFER">تحويل</option><option value="MIXED">نقد وشيك</option></select></label><label>تاريخ الاستحقاق<input name="dueDate" type="date" /></label><label class="invoice-note-field">ملاحظة المستند<input name="documentNote" placeholder="مرجع أو ملاحظة داخلية" /></label><div class="invoice-lines-editor"><div class="invoice-lines-head"><strong>بنود المستند</strong><button type="button" class="lookup-add" id="invoice-add-line">＋ إضافة بند</button></div><div class="invoice-line-table-wrap"><table class="invoice-line-table"><thead><tr><th>رمز الصنف</th><th>الوصف</th><th>الكمية</th><th>${isSales ? 'سعر البيع' : 'سعر الشراء'}</th><th>الإجمالي</th><th></th></tr></thead><tbody id="invoice-lines"></tbody></table></div><div class="invoice-summary"><span>قبل الضريبة <b id="invoice-subtotal">0</b></span><label>الضريبة<input name="taxAmount" id="invoice-tax" type="number" min="0" step="0.01" value="0" /></label><strong>الإجمالي <b id="invoice-total">0</b></strong></div></div>`;
+    $('modal-fields').innerHTML = `<div class="invoice-workflow-header"><div><span class="section-kicker">دورة المستند</span><strong>${isSales ? 'مبيعات' : 'مشتريات'} · مستند جديد</strong><small>مسودة قابلة للاعتماد والترحيل</small></div><div class="invoice-shortcuts"><span class="invoice-status-pill draft">مسودة</span><kbd>F9</kbd><small>بحث</small><kbd>Ctrl+S</kbd><small>حفظ</small><kbd>Ctrl+Shift+N</kbd><small>بند</small><kbd>Esc</kbd><small>إغلاق</small></div></div><div class="customer-lookup-field invoice-party-block"><label>${partyLabel}</label><div class="lookup-inline"><input name="party" id="invoice-party-search" autocomplete="off" placeholder="${partyPlaceholder}" required /><button type="button" id="add-party-inline" class="lookup-add">${partyButton}</button></div><input name="partyCode" id="invoice-party-code" type="hidden" /><div id="invoice-party-results" class="customer-search-results"></div><div id="invoice-party-preview" class="customer-balance-preview"><span>♙</span><div><strong>لم يتم اختيار ${partyLabel}</strong><small>سيظهر الرصيد عند اختياره</small></div><b>الرصيد: —</b></div></div><label>نوع المستند<select name="documentType" id="invoice-document-type">${(isSales ? [['SALES_ORDER','أمر بيع'],['DELIVERY_NOTE','إذن تسليم'],['SALES_INVOICE','فاتورة مبيعات'],['SALES_RETURN','مردود مبيعات']] : [['PURCHASE_ORDER','أمر شراء'],['RECEIPT_NOTE','إذن استلام'],['PURCHASE_INVOICE','فاتورة مشتريات'],['PURCHASE_RETURN','مردود مشتريات']]).map(([value, label]) => `<option value="${value}" ${value === (isSales ? 'SALES_INVOICE' : 'PURCHASE_INVOICE') ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>تاريخ المستند<input name="invoiceDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label><label>العملة<select name="currency" id="invoice-currency">${currencies.map(c => `<option value="${c.code}">${c.name} (${c.symbol})</option>`).join('')}</select></label><label>سعر الصرف<input name="exchangeRate" id="invoice-rate" type="number" min="0.000001" step="0.000001" value="1" required /></label><label>طريقة الدفع<select name="paymentMethod" id="invoice-payment-method"><option value="CASH">نقدًا</option><option value="CREDIT">آجل</option><option value="PARTIAL">جزئي</option></select></label><label>المبلغ المدفوع<input name="paidAmount" id="invoice-paid-amount" type="number" min="0" step="0.01" value="0" /></label><label>تاريخ الاستحقاق<input name="dueDate" type="date" /></label><label class="invoice-note-field">ملاحظة المستند<input name="documentNote" placeholder="مرجع أو ملاحظة داخلية" /></label><div class="invoice-lines-editor"><div class="invoice-lines-head"><strong>بنود المستند</strong><button type="button" class="lookup-add" id="invoice-add-line">＋ إضافة بند</button></div><div class="invoice-line-table-wrap"><table class="invoice-line-table"><thead><tr><th>رمز الصنف</th><th>الوصف</th><th>الكمية</th><th>${isSales ? 'سعر البيع' : 'سعر الشراء'}</th><th>الإجمالي</th><th></th></tr></thead><tbody id="invoice-lines"></tbody></table></div><div class="invoice-summary"><span>قبل الضريبة <b id="invoice-subtotal">0</b></span><label>الضريبة<input name="taxAmount" id="invoice-tax" type="number" min="0" step="0.01" value="0" /></label><strong>الإجمالي <b id="invoice-total">0</b></strong></div></div>`;
     form.dataset.view = view; form.classList.add('open');
     setupInvoicePartyLookup(isSales ? 'عميل' : 'مورد');
     setupInvoiceLines(view);
+    void hydrateInvoiceLookups(isSales ? 'عميل' : 'مورد');
+    setupInvoicePaymentFields();
     const warehouseLabel = document.createElement('label'); warehouseLabel.innerHTML = 'رمز المستودع<input name="warehouseCode" placeholder="WH-001" />'; $('invoice-rate')?.closest('label')?.before(warehouseLabel);
     setupInvoiceHotkeys();
     $('add-party-inline').addEventListener('click', () => { closeForm(); openForm('contacts'); });
@@ -376,7 +388,7 @@ function setupInvoiceHotkeys() { const form = $('entry-form'); if (form.dataset.
 function setupInvoiceLines(view) {
   const tbody = $('invoice-lines'); const currency = $('invoice-currency'); const tax = $('invoice-tax');
   const format = value => moneyInCurrency(value, currency?.value || 'SAR');
-  const recalc = () => { let subtotal = 0; tbody.querySelectorAll('.invoice-line').forEach(row => { const qty = Number(row.querySelector('[data-field="quantity"]').value || 0); const price = Number(row.querySelector('[data-field="unitPrice"]').value || 0); const total = Math.max(0, qty * price); subtotal += total; row.querySelector('[data-field="lineTotal"]').textContent = format(total); }); const taxAmount = Number(tax?.value || 0); $('invoice-subtotal').textContent = format(subtotal); $('invoice-total').textContent = format(subtotal + taxAmount); };
+  const recalc = () => { let subtotal = 0; tbody.querySelectorAll('.invoice-line').forEach(row => { const qty = Number(row.querySelector('[data-field="quantity"]').value || 0); const price = Number(row.querySelector('[data-field="unitPrice"]').value || 0); const total = Math.max(0, qty * price); subtotal += total; row.querySelector('[data-field="lineTotal"]').textContent = format(total); }); const taxAmount = Number(tax?.value || 0); const grandTotal = subtotal + taxAmount; $('invoice-subtotal').textContent = format(subtotal); $('invoice-subtotal').dataset.value = String(subtotal); $('invoice-total').textContent = format(grandTotal); $('invoice-total').dataset.value = String(grandTotal); const paymentMethod = $('invoice-payment-method'); const paid = $('invoice-paid-amount'); if (paymentMethod?.value === 'CASH' && paid) paid.value = grandTotal.toFixed(2); if (paymentMethod?.value === 'CREDIT' && paid) paid.value = '0'; };
   const addRow = () => { const row = document.createElement('tr'); row.className = 'invoice-line'; row.innerHTML = `<td><input data-field="itemCode" placeholder="رمز الصنف" required /></td><td><input data-field="description" placeholder="وصف اختياري" /></td><td><input data-field="quantity" type="number" min="0.01" step="0.01" value="1" required /></td><td><input data-field="unitPrice" type="number" min="0" step="0.01" value="0" required /></td><td data-field="lineTotal">${format(0)}</td><td><button type="button" class="line-remove" aria-label="حذف البند">×</button></td>`; row.querySelectorAll('input').forEach(input => input.addEventListener('input', recalc)); row.querySelector('.line-remove').addEventListener('click', () => { if (tbody.children.length > 1) { row.remove(); recalc(); } }); tbody.appendChild(row); recalc(); };
   $('invoice-add-line').addEventListener('click', addRow); tax.addEventListener('input', recalc); currency.addEventListener('change', recalc); addRow();
 }
@@ -384,6 +396,52 @@ function setupInvoiceLines(view) {
 function customerBalance(customer) { return state.invoices.filter(i => i.kind === 'مبيعات' && (i.party === customer.name || i.party === customer.code)).reduce((sum, i) => sum + Number(i.total || 0), 0); }
 
 function supplierBalance(supplier) { return state.invoices.filter(i => i.kind === 'مشتريات' && (i.party === supplier.name || i.party === supplier.code)).reduce((sum, i) => sum + Number(i.total || 0), 0); }
+
+async function hydrateInvoiceLookups(type) {
+  if (dataMode !== 'oracle' || !window.onyxAPI) return;
+  try {
+    const [contacts, items] = await Promise.all([
+      window.onyxAPI.modernContacts(''),
+      window.onyxAPI.modernItems('')
+    ]);
+    state.contacts = contacts.map(contact => ({
+      code: contact.CODE,
+      name: contact.NAME_AR,
+      type: String(contact.CONTACT_TYPE).toUpperCase() === 'VENDOR' ? 'مورد' : 'عميل',
+      phone: contact.PHONE || '',
+      email: contact.EMAIL || ''
+    }));
+    state.items = items.map(item => ({
+      code: item.ITEM_CODE,
+      name: item.ITEM_NAME_AR,
+      unit: item.UNIT_NAME || 'قطعة',
+      qty: Number(item.QUANTITY || 0),
+      cost: Number(item.COST_PRICE || 0),
+      sale: Number(item.SALE_PRICE || 0)
+    }));
+    showToast(`تم تحميل ${state.contacts.length} جهة و${state.items.length} صنف من Oracle.`, 'success');
+  } catch (error) {
+    state.contacts = [];
+    state.items = [];
+    showToast('تعذر تحميل العملاء والأصناف من Oracle؛ لن تُستخدم بيانات تجريبية.', 'error');
+    console.warn('Oracle invoice lookups unavailable:', error.message);
+  }
+}
+
+function setupInvoicePaymentFields() {
+  const method = $('invoice-payment-method');
+  const paid = $('invoice-paid-amount');
+  const total = () => Number($('invoice-total')?.dataset.value || 0);
+  const sync = () => {
+    if (!method || !paid) return;
+    if (method.value === 'CASH') paid.value = total().toFixed(2);
+    if (method.value === 'CREDIT') paid.value = '0';
+    paid.readOnly = method.value !== 'PARTIAL';
+  };
+  method?.addEventListener('change', sync);
+  paid?.addEventListener('input', () => { if (method.value !== 'PARTIAL') sync(); });
+  sync();
+}
 
 function setupInvoicePartyLookup(type) {
   const search = $('invoice-party-search'); const results = $('invoice-party-results'); const code = $('invoice-party-code'); const preview = $('invoice-party-preview');
@@ -474,11 +532,11 @@ $('entry-form').addEventListener('submit', async event => {
       else if (view === 'cash-receipt' || view === 'cash-payment') await window.onyxAPI.createCashVoucher({ voucherType: view === 'cash-receipt' ? 'RECEIPT' : 'PAYMENT', cashAccountCode: data.cashAccountCode, lines: [{ accountCode: data.accountCode, amount: Number(data.amount), description: data.description }], voucherDate: data.voucherDate, description: data.description });
       else if (view === 'ar-receipt' || view === 'ap-payment') { const result = await window.onyxAPI.createReceivablePayment({ paymentType: view === 'ar-receipt' ? 'RECEIPT' : 'PAYMENT', contactCode: data.contactCode, cashAccountCode: data.cashAccountCode, amount: Number(data.amount), paymentDate: data.paymentDate, description: data.description, allocations: [{ invoiceNo: data.invoiceNo, amount: Number(data.allocationAmount) }] }); await window.onyxAPI.postReceivablePayment({ paymentId: result.paymentId }); }
       else if (view === 'expense' || view === 'income') await window.onyxAPI.createExpenseIncome({ operationType: view === 'income' ? 'INCOME' : 'EXPENSE', cashAccountCode: data.cashAccountCode, [view === 'income' ? 'incomeAccountCode' : 'expenseAccountCode']: data.incomeAccountCode || data.expenseAccountCode, amount: Number(data.amount), description: data.description, operationDate: data.operationDate });
-      else if (view === 'sales' || view === 'purchases') { const invoiceType = view === 'sales' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE'; if (data.documentType && data.documentType !== invoiceType) await window.onyxAPI.createTradeDocument({ documentType: data.documentType, contactCode: data.partyCode || data.party, currencyCode: data.currency || 'SAR', exchangeRate: data.exchangeRate, documentDate: data.invoiceDate, paymentMethod: data.paymentMethod, dueDate: data.dueDate || null, documentNote: data.documentNote || null, lines: data.lines }); else await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.partyCode || data.party, currency: data.currency || 'SAR', exchangeRate: data.exchangeRate, warehouseCode: data.warehouseCode || null, taxAmount: data.taxAmount, invoiceDate: data.invoiceDate, lines: data.lines }); }
+      else if (view === 'sales' || view === 'purchases') { const invoiceType = view === 'sales' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE'; if (data.documentType && data.documentType !== invoiceType) await window.onyxAPI.createTradeDocument({ documentType: data.documentType, contactCode: data.partyCode || data.party, currencyCode: data.currency || 'SAR', exchangeRate: data.exchangeRate, documentDate: data.invoiceDate, paymentMethod: data.paymentMethod, dueDate: data.dueDate || null, documentNote: data.documentNote || null, lines: data.lines }); else await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.partyCode || data.party, currency: data.currency || 'SAR', exchangeRate: data.exchangeRate, warehouseCode: data.warehouseCode || null, paymentMethod: data.paymentMethod || 'CREDIT', paidAmount: Number(data.paidAmount || 0), dueDate: data.dueDate || null, taxAmount: data.taxAmount, invoiceDate: data.invoiceDate, lines: data.lines }); }
     } else {
       await submitLocal(view, data);
     }
-    closeForm(); renderModule(view); refreshDashboardMetrics(); showToast(dataMode === 'demo' ? 'تم الحفظ في الوضع التجريبي' : 'تم حفظ السجل بنجاح');
+    closeForm(); renderModule(view); refreshDashboardMetrics(); showToast(dataMode === 'demo' ? 'تم الحفظ في الوضع التجريبي' : (view === 'sales' || view === 'purchases' ? 'تم حفظ الفاتورة كمسودة.' : 'تم حفظ السجل بنجاح'), 'success');
   } catch (error) {
     if (dataMode === 'oracle') {
       console.error('Oracle write failed; no demo fallback was performed:', error);
@@ -528,7 +586,7 @@ async function loadLiveRows(view) {
     if (view === 'accounts') { try { rows = await window.onyxAPI.modernAccounts($('module-search')?.value || ''); } catch (_) { rows = await window.onyxAPI.accounts($('module-search')?.value || ''); } }
     if (view === 'contacts') { try { rows = await window.onyxAPI.modernContacts($('module-search')?.value || ''); } catch (_) { rows = await window.onyxAPI.customers($('module-search')?.value || ''); } }
     if (view === 'inventory') rows = await window.onyxAPI.modernItems($('module-search')?.value || '');
-    if (view === 'sales' || view === 'purchases') { rows = await window.onyxAPI.listInvoices({ invoiceType: view === 'sales' ? 'SALE' : 'PURCHASE' }); const body = $(view === 'sales' ? 'sales-body' : 'purchase-body'); if (body) body.innerHTML = rows.length ? rows.map(i => `<tr><td><strong class="journal-number">#${esc(i.INVOICE_NO)}</strong></td><td><strong>${esc(i.CONTACT_NAME || i.CONTACT_CODE || '—')}</strong></td><td>${esc(i.INVOICE_DATE || '')}</td><td><strong>${money(i.TOTAL_AMOUNT)}</strong></td><td>${money(i.OUTSTANDING_AMOUNT)}</td><td><span class="status ${i.STATUS_CODE === 'POSTED' ? 'paid' : 'pending'}">${esc(i.STATUS_CODE)}</span></td><td><button class="row-menu">•••</button></td></tr>`).join('') : dataStateRow(7, 'لا توجد فواتير في Oracle', 'لا توجد سجلات مطابقة للفترة أو النوع المحدد.', 'empty'); return; }
+    if (view === 'sales' || view === 'purchases') { rows = await window.onyxAPI.listInvoices({ invoiceType: view === 'sales' ? 'SALE' : 'PURCHASE' }); const body = $(view === 'sales' ? 'sales-body' : 'purchase-body'); if (body) { body.innerHTML = rows.length ? rows.map(i => { const action = i.STATUS_CODE === 'DRAFT' ? 'APPROVE' : i.STATUS_CODE === 'APPROVED' ? 'POST' : i.STATUS_CODE === 'POSTED' ? 'VOID' : ''; const actionLabel = action === 'APPROVE' ? 'اعتماد' : action === 'POST' ? 'ترحيل' : action === 'VOID' ? 'إلغاء' : ''; return `<tr><td><strong class="journal-number">#${esc(i.INVOICE_NO)}</strong></td><td><strong>${esc(i.CONTACT_NAME || i.CONTACT_CODE || '—')}</strong></td><td>${esc(i.INVOICE_DATE || '')}</td><td><strong>${money(i.TOTAL_AMOUNT)}</strong></td><td>${money(i.OUTSTANDING_AMOUNT)}</td><td><span class="status ${i.STATUS_CODE === 'POSTED' ? 'paid' : i.STATUS_CODE === 'VOID' ? 'danger' : i.STATUS_CODE === 'APPROVED' ? 'info' : 'pending'}">${esc(i.STATUS_CODE)}</span></td><td>${action ? `<button class="text-button invoice-transition" data-invoice-id="${esc(i.INVOICE_ID)}" data-invoice-action="${action}">${actionLabel}</button>` : '—'}</td></tr>`; }).join('') : dataStateRow(7, 'لا توجد فواتير في Oracle', 'لا توجد سجلات مطابقة للفترة أو النوع المحدد.', 'empty'); body.querySelectorAll('.invoice-transition').forEach(button => button.addEventListener('click', async () => { button.disabled = true; try { await window.onyxAPI.transitionInvoice({ invoiceId: Number(button.dataset.invoiceId), action: button.dataset.invoiceAction }); showToast('تم تحديث دورة الفاتورة بنجاح.', 'success'); await loadLiveRows(view); } catch (error) { showToast(error.message, 'error'); button.disabled = false; } })); } return; }
     if (view === 'cash' || view === 'expenses') return;
     if (view === 'journal') rows = await window.onyxAPI.journal(50);
     if (view === 'inventory') { const body = $('inventory-body'); if (body) body.innerHTML = rows.length ? rows.map(i => `<tr><td><strong>${esc(i.ITEM_NAME_AR)}</strong></td><td>${esc(i.ITEM_CODE)}</td><td>${esc(i.UNIT_NAME)}</td><td>${Number(i.QUANTITY || 0).toLocaleString('ar-SA')}</td><td>—</td><td>${money(i.COST_PRICE)}</td><td><span class="status paid">نشط</span></td><td><button class="row-menu">•••</button></td></tr>`).join('') : dataStateRow(8, 'لا توجد أصناف في Oracle', 'يمكن تغيير المرشحات أو إضافة صنف جديد.', 'empty'); return; }
@@ -548,16 +606,17 @@ async function loadLiveRows(view) {
 
 async function refreshDashboardMetrics() {
   const cards = document.querySelectorAll('.metric-card>strong');
-  if (dataMode === 'oracle' && window.onyxAPI?.dashboard) {
+  if (dataMode === 'oracle' && window.onyxAPI?.financialReports) {
     try {
-      const data = await window.onyxAPI.dashboard();
-      if (cards[0]) cards[0].innerHTML = `${Number(data.journals || 0).toLocaleString('ar-SA')} <small>عملية</small>`;
-      if (cards[1]) cards[1].innerHTML = `${Number(data.accounts || 0).toLocaleString('ar-SA')} <small>حساب</small>`;
-      if (cards[2]) cards[2].innerHTML = `${Number(data.customers || 0).toLocaleString('ar-SA')} <small>جهة</small>`;
+      const data = await window.onyxAPI.financialReports({ startDate: monthStart(), endDate: isoToday() });
+      const kpis = data.kpis || {};
+      if (cards[0]) cards[0].innerHTML = `${Number(kpis.revenue || 0).toLocaleString('ar-SA')} <small>ر.س</small>`;
+      if (cards[1]) cards[1].innerHTML = `${Number(kpis.profit || 0).toLocaleString('ar-SA')} <small>ر.س</small>`;
+      if (cards[2]) cards[2].innerHTML = `${Number(kpis.expenses || 0).toLocaleString('ar-SA')} <small>ر.س</small>`;
+      if (cards[3]) cards[3].innerHTML = `${Number(kpis.cash || 0).toLocaleString('ar-SA')} <small>ر.س</small>`;
+      const period = $('dashboard-period');
+      if (period) period.textContent = `الفترة من ${monthStart()} إلى ${isoToday()} · بيانات Oracle`;
       renderOracleDashboardState();
-      const labels = document.querySelectorAll('.metric-top > span:first-child');
-      ['القيود المرحّلة', 'الحسابات', 'الجهات', 'مصدر البيانات'].forEach((label, index) => { if (labels[index]) labels[index].textContent = label; });
-      if (cards[3]) cards[3].innerHTML = '<span class="status info">Oracle متصل</span>';
       return;
     } catch (error) {
       renderOracleDashboardState();
@@ -656,6 +715,8 @@ async function completeLogin(session) {
   if (name) name.textContent = session.displayNameAr;
   if (role) role.textContent = session.roles?.[0]?.ROLE_NAME_AR || session.role || 'مستخدم';
   const company = session.company;
+  const userName = $('dashboard-user-name');
+  if (userName) userName.textContent = session.displayNameAr || session.username || 'المستخدم';
   if (company) {
     const workspaceName = document.querySelector('.workspace-name');
     const workspaceMode = document.querySelector('.workspace-mode');
