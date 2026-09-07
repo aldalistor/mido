@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   journal: (limit = 50) => ipcRenderer.invoke('db:journal', { limit }),
   createJournal: (payload) => ipcRenderer.invoke('db:create-journal', payload),
   currentSession: () => ipcRenderer.invoke('auth:current'),
+  sessionContexts: () => ipcRenderer.invoke('auth:contexts'),
+  setSessionContext: (payload) => ipcRenderer.invoke('auth:set-context', payload),
   login: (payload) => ipcRenderer.invoke('auth:login', payload),
   logout: () => ipcRenderer.invoke('auth:logout'),
   hasUsers: () => ipcRenderer.invoke('admin:has-users'),
@@ -24,4 +26,5 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   listRoles: () => ipcRenderer.invoke('admin:list-roles'),
   createUser: (payload) => ipcRenderer.invoke('admin:create-user', payload),
   assignRole: (payload) => ipcRenderer.invoke('admin:assign-role', payload),
+  listAudit: (payload = {}) => ipcRenderer.invoke('admin:list-audit', payload),
 });

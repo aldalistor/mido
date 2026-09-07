@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
 const dbSetup = require('./db-setup');
+const sessionContext = require('./session-context');
 
 let currentSession = null;
 function requirePermission(permission) { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); if (!currentSession.permissions.includes(permission) && !currentSession.permissions.includes('MANAGE_USERS')) throw new Error('لا تملك صلاحية تنفيذ هذه العملية.'); }
@@ -23,8 +24,11 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:journal', (_event, payload = {}) => db.journal(payload.limit || 50));
   ipcMain.handle('db:create-journal', (_event, payload = {}) => { requirePermission('POST_JOURNALS'); return db.createModernJournal(payload); });
   ipcMain.handle('auth:current', () => currentSession);
+  ipcMain.handle('auth:contexts', () => { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); return db.listSessionContexts(currentSession.userId); });
+  ipcMain.handle('auth:set-context', async (_event, payload = {}) => { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); const selected = await db.setSessionContext(currentSession.userId, payload); currentSession = { ...currentSession, context: sessionContext.normalizeContext({ ...payload, languageCode: currentSession.languageCode, terminal: 'Electron' }), company: selected }; await db.recordAudit({ ...currentSession.context, userId: currentSession.userId, actionCode: 'SET_SESSION_CONTEXT', entityType: 'SESSION', entityId: currentSession.userId, afterValue: selected }); return currentSession; });
   ipcMain.handle('auth:login', async (_event, payload = {}) => { currentSession = await db.authenticate(payload.username, payload.password, { languageCode: 'ar', terminal: 'Electron' }); return currentSession; });
-  ipcMain.handle('auth:logout', async () => { currentSession = null; return true; });
+  ipcMain.handle('auth:logout', async () => { if (currentSession) { await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'LOGOUT', entityType: 'SESSION', entityId: currentSession.userId }); } currentSession = null; return true; });
+  ipcMain.handle('admin:list-audit', (_event, payload = {}) => { requirePermission('VIEW_AUDIT_LOG'); return db.listAudit({ ...(currentSession.context || {}), ...payload }); });
   ipcMain.handle('admin:has-users', async () => (await db.listUsers()).length > 0);
   ipcMain.handle('admin:list-users', () => { requirePermission('MANAGE_USERS'); return db.listUsers(); });
   ipcMain.handle('admin:list-roles', () => { requirePermission('MANAGE_ROLES'); return db.listRoles(); });
