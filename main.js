@@ -1,8 +1,17 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
-const db = String(process.env.ONYX_DB_ENGINE || 'access').toLowerCase() === 'oracle' ? require('./db') : require('./access-db');
-const accessDb = require('./access-db');
+let accessDb;
+try {
+  accessDb = require('./access-db');
+} catch (error) {
+  console.warn(`Access MDB غير متاح حاليًا: ${error.message}`);
+  accessDb = {
+    test: async () => { throw new Error(`تعذر تحميل موصل Access: ${error.message}`); },
+    initialize: async () => { throw new Error(`تعذر تهيئة Access MDB: ${error.message}`); },
+  };
+}
+const db = String(process.env.ONYX_DB_ENGINE || 'access').toLowerCase() === 'oracle' ? require('./db') : accessDb;
 const dbSetup = require('./db-setup');
 const sessionContext = require('./session-context');
 const commercialLicense = require('./commercial-license-core');
