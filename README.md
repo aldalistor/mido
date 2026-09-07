@@ -15,10 +15,20 @@
 
 ## التطوير المحلي
 
+للدليل الكامل على تطوير المشروع وبنائه على Windows راجع [WINDOWS_DEVELOPMENT_AR.md](WINDOWS_DEVELOPMENT_AR.md).
+
 ```bash
-npm install
+npm ci
 npm start
 ```
+
+لفحص بيئة Windows قبل تشغيل التطبيق:
+
+```powershell
+npm run doctor:win
+```
+
+نفّذ الاختبار المرحلي بالترتيب التالي: `npm run doctor:win`، ثم `npm test`، ثم `npm run dev`. بعد ذلك اختبر شاشة التأسيس الأولى، إنشاء ملف MDB، تسجيل الدخول، ثم تبويبات لوحة التحكم والقيود ودليل الحسابات والمبيعات والمخزون.
 
 لتشغيل نسخة MDB محلية بمسار محدد على Windows:
 
