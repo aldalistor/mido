@@ -292,9 +292,16 @@ function openForm(view) {
   const form = $('form-modal');
   $('modal-title').textContent = titles[view] || 'سجل جديد';
   if (view === 'sales' || view === 'purchases') {
-    const isSales = view === 'sales'; const partyLabel = isSales ? 'العميل' : 'المورد'; const partyPlaceholder = isSales ? 'ابحث باسم العميل أو رقمه...' : 'ابحث باسم المورد أو رقمه...'; const partyButton = isSales ? '＋ عميل' : '＋ مورد';
-    $('modal-fields').innerHTML = `<div class="customer-lookup-field"><label>${partyLabel}</label><div class="lookup-inline"><input name="party" id="invoice-party-search" autocomplete="off" placeholder="${partyPlaceholder}" required /><button type="button" id="add-party-inline" class="lookup-add">${partyButton}</button></div><input name="partyCode" id="invoice-party-code" type="hidden" /><div id="invoice-party-results" class="customer-search-results"></div><div id="invoice-party-preview" class="customer-balance-preview"><span>♙</span><div><strong>لم يتم اختيار ${partyLabel}</strong><small>سيظهر الرصيد عند اختياره</small></div><b>الرصيد: —</b></div></div><div class="item-lookup-field"><div class="lookup-label-row"><label>الصنف</label><button type="button" id="add-item-inline" class="lookup-add">＋ صنف جديد</button></div><input id="invoice-item-search" autocomplete="off" placeholder="ابحث بالاسم أو الرقم أو أي حرف..." /><input name="itemCode" id="invoice-item-code" type="hidden" required /><div id="invoice-item-results" class="item-search-results"></div><div id="invoice-item-preview" class="selected-item-preview"><span>▤</span><div><strong>لم يتم اختيار صنف</strong><small>ابدأ بكتابة اسم الصنف أو رمزه</small></div></div></div><label>العملة<select name="currency" id="invoice-currency">${currencies.map(c => `<option value="${c.code}">${c.name} (${c.symbol})</option>`).join('')}</select></label><label>سعر الصرف<input name="exchangeRate" id="invoice-rate" type="number" min="0.000001" step="0.000001" value="1" required /></label><label>الكمية<input name="quantity" type="number" min="0.01" step="0.01" value="1" required /></label><label>${isSales ? 'سعر البيع' : 'سعر الشراء'}<input name="unitPrice" id="invoice-unit-price" type="number" min="0" step="0.01" required /></label><div class="sales-entry-summary"><span>التكلفة: <b id="invoice-item-cost">—</b></span><span>المتاح: <b id="invoice-item-stock">—</b></span><span>بالريال السعودي: <b id="invoice-total-base">0 ر.س</b></span><strong>الإجمالي: <b id="invoice-total">0 ${currencyInfo('SAR').symbol}</b></strong></div>`;
-    form.dataset.view = view; form.classList.add('open'); setupInvoicePartyLookup(isSales ? 'عميل' : 'مورد'); setupInvoiceItemLookup(view); $('add-party-inline').addEventListener('click', () => { closeForm(); openForm('contacts'); }); $('add-item-inline').addEventListener('click', () => { closeForm(); openForm('inventory'); }); return;
+    const isSales = view === 'sales';
+    const partyLabel = isSales ? 'العميل' : 'المورد';
+    const partyPlaceholder = isSales ? 'ابحث باسم العميل أو رقمه...' : 'ابحث باسم المورد أو رقمه...';
+    const partyButton = isSales ? '＋ عميل' : '＋ مورد';
+    $('modal-fields').innerHTML = `<div class="customer-lookup-field invoice-party-block"><label>${partyLabel}</label><div class="lookup-inline"><input name="party" id="invoice-party-search" autocomplete="off" placeholder="${partyPlaceholder}" required /><button type="button" id="add-party-inline" class="lookup-add">${partyButton}</button></div><input name="partyCode" id="invoice-party-code" type="hidden" /><div id="invoice-party-results" class="customer-search-results"></div><div id="invoice-party-preview" class="customer-balance-preview"><span>♙</span><div><strong>لم يتم اختيار ${partyLabel}</strong><small>سيظهر الرصيد عند اختياره</small></div><b>الرصيد: —</b></div></div><label>تاريخ المستند<input name="invoiceDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label><label>العملة<select name="currency" id="invoice-currency">${currencies.map(c => `<option value="${c.code}">${c.name} (${c.symbol})</option>`).join('')}</select></label><label>سعر الصرف<input name="exchangeRate" id="invoice-rate" type="number" min="0.000001" step="0.000001" value="1" required /></label><div class="invoice-lines-editor"><div class="invoice-lines-head"><strong>بنود المستند</strong><button type="button" class="lookup-add" id="invoice-add-line">＋ إضافة بند</button></div><div class="invoice-line-table-wrap"><table class="invoice-line-table"><thead><tr><th>رمز الصنف</th><th>الوصف</th><th>الكمية</th><th>${isSales ? 'سعر البيع' : 'سعر الشراء'}</th><th>الإجمالي</th><th></th></tr></thead><tbody id="invoice-lines"></tbody></table></div><div class="invoice-summary"><span>قبل الضريبة <b id="invoice-subtotal">0</b></span><label>الضريبة<input name="taxAmount" id="invoice-tax" type="number" min="0" step="0.01" value="0" /></label><strong>الإجمالي <b id="invoice-total">0</b></strong></div></div>`;
+    form.dataset.view = view; form.classList.add('open');
+    setupInvoicePartyLookup(isSales ? 'عميل' : 'مورد');
+    setupInvoiceLines(view);
+    $('add-party-inline').addEventListener('click', () => { closeForm(); openForm('contacts'); });
+    return;
   }
   const fields = {
     journal: [['description', 'البيان'], ['debitAccount', 'الحساب المدين'], ['creditAccount', 'الحساب الدائن'], ['amount', 'المبلغ', 'number']],
@@ -307,6 +314,14 @@ function openForm(view) {
   $('modal-fields').innerHTML = fields.map(([name, label, type = 'text']) => `<label>${label}<input name="${name}" type="${type}" step="0.01" required /></label>`).join('');
   form.dataset.view = view;
   form.classList.add('open');
+}
+
+function setupInvoiceLines(view) {
+  const tbody = $('invoice-lines'); const currency = $('invoice-currency'); const tax = $('invoice-tax');
+  const format = value => moneyInCurrency(value, currency?.value || 'SAR');
+  const recalc = () => { let subtotal = 0; tbody.querySelectorAll('.invoice-line').forEach(row => { const qty = Number(row.querySelector('[data-field="quantity"]').value || 0); const price = Number(row.querySelector('[data-field="unitPrice"]').value || 0); const total = Math.max(0, qty * price); subtotal += total; row.querySelector('[data-field="lineTotal"]').textContent = format(total); }); const taxAmount = Number(tax?.value || 0); $('invoice-subtotal').textContent = format(subtotal); $('invoice-total').textContent = format(subtotal + taxAmount); };
+  const addRow = () => { const row = document.createElement('tr'); row.className = 'invoice-line'; row.innerHTML = `<td><input data-field="itemCode" placeholder="رمز الصنف" required /></td><td><input data-field="description" placeholder="وصف اختياري" /></td><td><input data-field="quantity" type="number" min="0.01" step="0.01" value="1" required /></td><td><input data-field="unitPrice" type="number" min="0" step="0.01" value="0" required /></td><td data-field="lineTotal">${format(0)}</td><td><button type="button" class="line-remove" aria-label="حذف البند">×</button></td>`; row.querySelectorAll('input').forEach(input => input.addEventListener('input', recalc)); row.querySelector('.line-remove').addEventListener('click', () => { if (tbody.children.length > 1) { row.remove(); recalc(); } }); tbody.appendChild(row); recalc(); };
+  $('invoice-add-line').addEventListener('click', addRow); tax.addEventListener('input', recalc); currency.addEventListener('change', recalc); addRow();
 }
 
 function customerBalance(customer) { return state.invoices.filter(i => i.kind === 'مبيعات' && (i.party === customer.name || i.party === customer.code)).reduce((sum, i) => sum + Number(i.total || 0), 0); }
@@ -363,24 +378,26 @@ async function submitLocal(view, data) {
     if (state.contacts.some(c => c.code === data.code)) throw new Error('رمز الجهة مستخدم مسبقًا.');
     state.contacts.push({ code: data.code, name: data.name, type: data.type.includes('مورد') ? 'مورد' : 'عميل', phone: data.phone, email: data.email });
   } else if (view === 'sales' || view === 'purchases') {
-    const quantity = Number(data.quantity); const price = Number(data.unitPrice);
-    if (quantity <= 0 || price < 0) throw new Error('أدخل كمية وسعرًا صحيحين.');
-    const item = state.items.find(i => i.code === data.itemCode); if (!item) throw new Error('الصنف غير موجود.'); if (view === 'sales' && Number(item.qty) < quantity) throw new Error(`الرصيد المخزني غير كافٍ للصنف ${item.name}.`);
-    const total = quantity * price; const currency = data.currency || 'SAR'; const exchangeRate = Number(data.exchangeRate || currencyInfo(currency).rate || 1); const baseTotal = total * exchangeRate; const costTotal = Number(item.cost || 0) * quantity;
-    const ref = `${view === 'sales' ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4, '0')}`;
-    const sale = view === 'sales'; const journalLines = sale ? [{ accountCode: '1201', debit: baseTotal, credit: 0 }, { accountCode: '4101', debit: 0, credit: baseTotal }, { accountCode: '5102', debit: costTotal * exchangeRate, credit: 0 }, { accountCode: '1301', debit: 0, credit: costTotal * exchangeRate }] : [{ accountCode: '1301', debit: baseTotal, credit: 0 }, { accountCode: '2101', debit: 0, credit: baseTotal }];
-    state.invoices.unshift({ ref, kind: sale ? 'مبيعات' : 'مشتريات', party: data.party, partyCode: data.partyCode, total, baseTotal, currency, exchangeRate, date, status: 'مرحّل', journalLines, stockMovement: { itemCode: item.code, quantity: sale ? -quantity : quantity, unitCost: sale ? item.cost : price } });
-    state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4, '0')}`, date, description: sale ? `قيد فاتورة مبيعات ${ref}` : `قيد فاتورة مشتريات ${ref}`, debit: baseTotal + (sale ? costTotal * exchangeRate : 0), credit: baseTotal + (sale ? costTotal * exchangeRate : 0), currency, exchangeRate, status: 'مرحّل', source: sale ? 'SALE_INVOICE' : 'PURCHASE_INVOICE' });
-    state.stockMovements = Array.isArray(state.stockMovements) ? state.stockMovements : []; state.stockMovements.unshift({ ref, itemCode: item.code, type: sale ? 'SALE' : 'PURCHASE', quantity: sale ? -quantity : quantity, unitCost: sale ? item.cost : price, date });
-    item.qty = Number(item.qty) + (sale ? -quantity : quantity);
+    const lines = Array.isArray(data.lines) ? data.lines : [];
+    if (!lines.length) throw new Error('أضف بندًا واحدًا على الأقل.');
+    const sale = view === 'sales'; const quantityTotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+    const subtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0); const tax = Number(data.taxAmount || 0); const total = subtotal + tax; const currency = data.currency || 'SAR'; const exchangeRate = Number(data.exchangeRate || currencyInfo(currency).rate || 1); const baseTotal = total * exchangeRate;
+    for (const line of lines) { const item = state.items.find(i => i.code === line.itemCode); if (!item) throw new Error(`الصنف غير موجود: ${line.itemCode}`); if (sale && Number(item.qty) < Number(line.quantity)) throw new Error(`الرصيد المخزني غير كافٍ للصنف ${item.name}.`); }
+    const ref = `${sale ? 'INV' : 'PUR'}-${String(state.invoices.length + 1).padStart(4, '0')}`; const costTotal = lines.reduce((sum, line) => { const item = state.items.find(i => i.code === line.itemCode); return sum + Number(item.cost || 0) * Number(line.quantity || 0); }, 0);
+    state.invoices.unshift({ ref, kind: sale ? 'مبيعات' : 'مشتريات', party: data.party, partyCode: data.partyCode, total, baseTotal, currency, exchangeRate, date: data.invoiceDate || date, status: 'مرحّل', lines, tax, stockMovement: { count: lines.length, quantity: sale ? -quantityTotal : quantityTotal } });
+    state.entries.unshift({ no: `JV-${String(state.entries.length + 1).padStart(4, '0')}`, date: data.invoiceDate || date, description: sale ? `قيد فاتورة مبيعات ${ref}` : `قيد فاتورة مشتريات ${ref}`, debit: baseTotal + (sale ? costTotal * exchangeRate : 0), credit: baseTotal + (sale ? costTotal * exchangeRate : 0), currency, exchangeRate, status: 'مرحّل', source: sale ? 'SALE_INVOICE' : 'PURCHASE_INVOICE' });
+    state.stockMovements = Array.isArray(state.stockMovements) ? state.stockMovements : [];
+    for (const line of lines) { const item = state.items.find(i => i.code === line.itemCode); const qty = Number(line.quantity || 0); const price = Number(line.unitPrice || 0); state.stockMovements.unshift({ ref, itemCode: item.code, type: sale ? 'SALE' : 'PURCHASE', quantity: sale ? -qty : qty, unitCost: sale ? item.cost : price, date: data.invoiceDate || date }); item.qty = Number(item.qty) + (sale ? -qty : qty); }
   }
   save();
 }
 
+function collectInvoiceFormData(view) { const form = $('entry-form'); const data = Object.fromEntries(new FormData(form)); if (view !== 'sales' && view !== 'purchases') return data; const lines = [...document.querySelectorAll('#invoice-lines .invoice-line')].map(row => ({ itemCode: row.querySelector('[data-field="itemCode"]').value.trim(), description: row.querySelector('[data-field="description"]').value.trim(), quantity: Number(row.querySelector('[data-field="quantity"]').value), unitPrice: Number(row.querySelector('[data-field="unitPrice"]').value) })).filter(line => line.itemCode); if (!lines.length) throw new Error('أضف بندًا واحدًا على الأقل إلى الفاتورة.'); return { ...data, lines, taxAmount: Number(data.taxAmount || 0), exchangeRate: Number(data.exchangeRate || 1), invoiceDate: data.invoiceDate || new Date().toISOString().slice(0, 10) }; }
+
 $('entry-form').addEventListener('submit', async event => {
   event.preventDefault();
   const view = event.currentTarget.dataset.view;
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const data = collectInvoiceFormData(view);
   if (view === 'security-user') {
     try {
       if (dataMode === 'demo') { state.users.push({ username: data.username, displayNameAr: data.displayNameAr, role: data.role || 'مستخدم' }); save(); }
@@ -395,7 +412,7 @@ $('entry-form').addEventListener('submit', async event => {
       else if (view === 'inventory') await window.onyxAPI.createItem({ code: data.code, name: data.name, unit: data.unit, quantity: data.qty, cost: data.cost, sale: data.sale });
       else if (view === 'contacts') await window.onyxAPI.createContact({ code: data.code, name: data.name, type: data.type.includes('مورد') ? 'VENDOR' : 'CUSTOMER', phone: data.phone, email: data.email });
       else if (view === 'journal') await window.onyxAPI.createJournal({ description: data.description, lines: [{ accountCode: data.debitAccount, debit: Number(data.amount), credit: 0 }, { accountCode: data.creditAccount, debit: 0, credit: Number(data.amount) }] });
-      else if (view === 'sales' || view === 'purchases') await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.partyCode || data.party, currency: data.currency || 'SAR', exchangeRate: Number(data.exchangeRate || 1), lines: [{ itemCode: data.itemCode, quantity: Number(data.quantity), unitPrice: Number(data.unitPrice) }] });
+      else if (view === 'sales' || view === 'purchases') await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.partyCode || data.party, currency: data.currency || 'SAR', exchangeRate: data.exchangeRate, taxAmount: data.taxAmount, invoiceDate: data.invoiceDate, lines: data.lines });
     } else {
       await submitLocal(view, data);
     }
