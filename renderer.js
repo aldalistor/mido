@@ -43,11 +43,31 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;
 const $ = id => document.getElementById(id);
 const toast = $('toast');
 let dataMode = 'detecting';
+let toastTimer = null;
 
-function showToast(message) {
+function showToast(message, tone = 'info') {
   toast.textContent = message;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2400);
+  toast.classList.remove('success', 'warning', 'error', 'info');
+  toast.classList.add(['success', 'warning', 'error', 'info'].includes(tone) ? tone : 'info', 'show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+}
+
+function dataStateRow(colspan, title, detail = '', state = 'empty') {
+  return `<tr><td colspan="${Number(colspan) || 1}" class="data-state ${esc(state)}"><strong>${esc(title)}</strong>${detail ? `<small>${esc(detail)}</small>` : ''}</td></tr>`;
+}
+
+function renderRows(rows, colspan = 8, options = {}) {
+  if (options.loading) return dataStateRow(colspan, 'جارٍ تحميل البيانات…', 'يتم جلب السجلات من مصدر البيانات الحالي.', 'loading');
+  if (options.error) return dataStateRow(colspan, 'تعذر تحميل البيانات', options.error, 'error');
+  return rows.length ? rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('') : dataStateRow(colspan, options.empty || 'لا توجد سجلات ضمن الفترة المحددة.', 'يمكن تغيير المرشحات أو إنشاء سجل جديد.', 'empty');
+}
+
+function renderOracleDashboardState() {
+  const analysis = $('dashboard-analysis');
+  const activity = $('dashboard-activity');
+  if (analysis) analysis.innerHTML = '<div class="oracle-live-placeholder"><div><strong>التحليل المالي الحي</strong><p>سيظهر الرسم بعد اكتمال ربط تقرير الاتجاهات بالفترة والشركة المحددتين.</p></div></div>';
+  if (activity) activity.innerHTML = '<div class="oracle-live-placeholder"><div><strong>سجل النشاط الحي</strong><p>يتم عرض المؤشرات الأساسية من Oracle. افتح التقارير لعرض التفاصيل المرحّلة.</p></div></div>';
 }
 
 function today() {
@@ -103,8 +123,23 @@ function localRows(view) {
   return [['قائمة الدخل', 'الشهر الحالي', 'جاهز'], ['ميزان المراجعة', 'الشهر الحالي', 'جاهز'], ['أعمار الذمم', 'الشهر الحالي', 'جاهز']];
 }
 
-function renderRows(rows) {
-  return rows.length ? rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('') : '<tr><td colspan="8" class="empty-cell">لا توجد سجلات بعد. أضف أول سجل من الزر أعلاه.</td></tr>';
+function renderOracleModuleShell(view) {
+  const configs = {
+    journal: { title: 'القيود اليومية', action: 'قيد جديد', columns: ['الرقم', 'التاريخ', 'البيان', 'مدين', 'دائن', 'الحالة'], colspan: 6 },
+    accounts: { title: 'دليل الحسابات', action: 'حساب جديد', columns: ['الرمز', 'اسم الحساب', 'النوع', 'الرصيد'], colspan: 4 },
+    sales: { title: 'المبيعات', action: 'فاتورة مبيعات', columns: ['المرجع', 'العميل', 'التاريخ', 'الإجمالي', 'المستحق', 'الحالة'], colspan: 6 },
+    purchases: { title: 'المشتريات', action: 'فاتورة مشتريات', columns: ['المرجع', 'المورد', 'التاريخ', 'الإجمالي', 'المستحق', 'الحالة'], colspan: 6 },
+    inventory: { title: 'المخزون', action: 'إضافة صنف', columns: ['الصنف', 'الرمز', 'الوحدة', 'المتاح', 'محجوز', 'متوسط التكلفة', 'الحالة', 'الإجراءات'], colspan: 8 },
+    contacts: { title: 'العملاء والموردون', action: 'إضافة جهة', columns: ['الرمز', 'الاسم', 'النوع', 'الهاتف'], colspan: 4 }
+  };
+  const config = configs[view];
+  if (!config) return false;
+  const bodyId = view === 'sales' ? 'sales-body' : view === 'purchases' ? 'purchase-body' : view === 'inventory' ? 'inventory-body' : 'module-body';
+  const rows = view === 'sales' || view === 'purchases' ? '' : dataStateRow(config.colspan, 'جارٍ تحميل بيانات Oracle…', 'يتم جلب السجلات من الشركة والفرع والسنة المالية الحالية.', 'loading');
+  $('generic-content').innerHTML = `<div class="module-toolbar"><div><p class="eyebrow">بيانات حية من Oracle</p><h2>${esc(config.title)}</h2><p class="toolbar-description">لا تُعرض بيانات تجريبية أثناء الاتصال بقاعدة البيانات.</p></div><div class="toolbar-actions"><button class="secondary-button" id="module-report">تقرير ${esc(config.title)}</button><button class="primary-button" id="module-action">＋ ${esc(config.action)}</button></div></div><div class="panel module-panel"><div class="table-tools"><input id="module-search" placeholder="ابحث في ${esc(config.title)}..." /><span>جارٍ تحميل سجلات Oracle…</span></div><div class="table-scroll"><table><thead><tr>${config.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody id="${bodyId}">${rows}</tbody></table></div></div>`;
+  $('module-action').addEventListener('click', () => openForm(view));
+  $('module-report').addEventListener('click', () => showToast(`التقرير الحي لـ${config.title} متاح من شاشة التقارير.`, 'info'));
+  return true;
 }
 
 function accountTreeRows(accounts) {
@@ -265,6 +300,7 @@ async function renderExpensesWorkspace() {
 }
 
 function renderModule(view) {
+  if (dataMode === 'oracle' && renderOracleModuleShell(view)) return;
   if (view === 'cash') return renderCashWorkspace();
   if (view === 'expenses') return renderExpensesWorkspace();
   if (view === 'accounts') return renderAccountsWorkspace();
@@ -287,8 +323,8 @@ function renderModule(view) {
     reports: { action: 'تحديث التقارير', columns: ['التقرير', 'الفترة', 'الحالة'] }
   };
   const config = configs[view] || configs.reports;
-  const rows = localRows(view);
-  $('generic-content').innerHTML = `<div class="module-toolbar"><div><p class="eyebrow">إدارة ${esc(labels[view])}</p><h2>${esc(labels[view])}</h2></div><div class="toolbar-actions"><button class="secondary-button" id="module-report">⇩ تقرير ${esc(labels[view])}</button><button class="primary-button" id="module-action">＋ ${esc(config.action)}</button></div></div><div class="panel module-panel"><div class="table-tools"><input id="module-search" placeholder="ابحث في ${esc(labels[view])}..." /><span>${rows.length} سجل${dataMode === 'demo' ? ' · تجريبي' : ''}</span></div><div class="table-scroll"><table><thead><tr>${config.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody id="module-body">${renderRows(rows)}</tbody></table></div></div>`;
+  const rows = dataMode === 'oracle' ? [] : localRows(view);
+  $('generic-content').innerHTML = `<div class="module-toolbar"><div><p class="eyebrow">إدارة ${esc(labels[view])}</p><h2>${esc(labels[view])}</h2></div><div class="toolbar-actions"><button class="secondary-button" id="module-report">⇩ تقرير ${esc(labels[view])}</button><button class="primary-button" id="module-action">＋ ${esc(config.action)}</button></div></div><div class="panel module-panel"><div class="table-tools"><input id="module-search" placeholder="ابحث في ${esc(labels[view])}..." /><span>${dataMode === 'oracle' ? 'جارٍ تحميل سجلات Oracle…' : `${rows.length} سجل · تجريبي`}</span></div><div class="table-scroll"><table><thead><tr>${config.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody id="module-body">${renderRows(rows)}</tbody></table></div></div>`;
   $('module-action').addEventListener('click', () => view === 'reports' ? showToast('تم تحديث التقارير التجريبية') : openForm(view));
   $('module-report').addEventListener('click', () => showToast(`تم تجهيز تقرير ${labels[view]} للفترة الحالية`));
   $('module-search').addEventListener('input', event => {
@@ -464,6 +500,7 @@ document.querySelector('.icon-button').addEventListener('click', () => showToast
 
 function setDemoMode() {
   dataMode = 'demo';
+  document.body.classList.remove('oracle-live');
   const status = $('db-status');
   status.classList.remove('checking', 'connected'); status.classList.add('demo'); status.innerHTML = '<i></i> وضع تجريبي';
   $('login-subtitle').textContent = 'وضع تجريبي جاهز للتجربة دون Oracle';
@@ -477,7 +514,9 @@ async function refreshDbStatus() {
   status.classList.add('checking'); status.innerHTML = '<i></i> جارٍ الاتصال';
   try {
     const info = await window.onyxAPI.dbTest();
-    dataMode = 'oracle'; status.classList.remove('checking', 'demo'); status.classList.add('connected'); status.innerHTML = `<i></i> Oracle: ${esc(info.DB_USER)}`;
+    dataMode = 'oracle';
+    document.body.classList.add('oracle-live');
+    status.classList.remove('checking', 'demo'); status.classList.add('connected'); status.innerHTML = `<i></i> Oracle: ${esc(info.DB_USER)}`;
     return true;
   } catch (error) { setDemoMode(); console.warn('Oracle connection unavailable:', error.message); return false; }
 }
@@ -489,15 +528,22 @@ async function loadLiveRows(view) {
     if (view === 'accounts') { try { rows = await window.onyxAPI.modernAccounts($('module-search')?.value || ''); } catch (_) { rows = await window.onyxAPI.accounts($('module-search')?.value || ''); } }
     if (view === 'contacts') { try { rows = await window.onyxAPI.modernContacts($('module-search')?.value || ''); } catch (_) { rows = await window.onyxAPI.customers($('module-search')?.value || ''); } }
     if (view === 'inventory') rows = await window.onyxAPI.modernItems($('module-search')?.value || '');
-    if (view === 'sales' || view === 'purchases') { rows = await window.onyxAPI.listInvoices({ invoiceType: view === 'sales' ? 'SALE' : 'PURCHASE' }); const body = $(view === 'sales' ? 'sales-body' : 'purchase-body'); if (body) body.innerHTML = rows.map(i => `<tr><td><strong class="journal-number">#${esc(i.INVOICE_NO)}</strong></td><td><strong>${esc(i.CONTACT_NAME || i.CONTACT_CODE || '—')}</strong></td><td>${esc(i.INVOICE_DATE || '')}</td><td><strong>${money(i.TOTAL_AMOUNT)}</strong></td><td>${money(i.OUTSTANDING_AMOUNT)}</td><td><span class="status ${i.STATUS_CODE === 'POSTED' ? 'paid' : 'pending'}">${esc(i.STATUS_CODE)}</span></td><td><button class="row-menu">•••</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty-cell">لا توجد فواتير في Oracle.</td></tr>'; return; }
+    if (view === 'sales' || view === 'purchases') { rows = await window.onyxAPI.listInvoices({ invoiceType: view === 'sales' ? 'SALE' : 'PURCHASE' }); const body = $(view === 'sales' ? 'sales-body' : 'purchase-body'); if (body) body.innerHTML = rows.length ? rows.map(i => `<tr><td><strong class="journal-number">#${esc(i.INVOICE_NO)}</strong></td><td><strong>${esc(i.CONTACT_NAME || i.CONTACT_CODE || '—')}</strong></td><td>${esc(i.INVOICE_DATE || '')}</td><td><strong>${money(i.TOTAL_AMOUNT)}</strong></td><td>${money(i.OUTSTANDING_AMOUNT)}</td><td><span class="status ${i.STATUS_CODE === 'POSTED' ? 'paid' : 'pending'}">${esc(i.STATUS_CODE)}</span></td><td><button class="row-menu">•••</button></td></tr>`).join('') : dataStateRow(7, 'لا توجد فواتير في Oracle', 'لا توجد سجلات مطابقة للفترة أو النوع المحدد.', 'empty'); return; }
     if (view === 'cash' || view === 'expenses') return;
     if (view === 'journal') rows = await window.onyxAPI.journal(50);
-    if (view === 'inventory') { const body = $('inventory-body'); if (body) body.innerHTML = rows.map(i => `<tr><td><strong>${esc(i.ITEM_NAME_AR)}</strong></td><td>${esc(i.ITEM_CODE)}</td><td>${esc(i.UNIT_NAME)}</td><td>${Number(i.QUANTITY || 0).toLocaleString('ar-SA')}</td><td>—</td><td>${money(i.COST_PRICE)}</td><td><span class="status paid">نشط</span></td><td><button class="row-menu">•••</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty-cell">لا توجد أصناف في Oracle.</td></tr>'; return; }
-    if (!rows.length || !$('module-body')) return;
+    if (view === 'inventory') { const body = $('inventory-body'); if (body) body.innerHTML = rows.length ? rows.map(i => `<tr><td><strong>${esc(i.ITEM_NAME_AR)}</strong></td><td>${esc(i.ITEM_CODE)}</td><td>${esc(i.UNIT_NAME)}</td><td>${Number(i.QUANTITY || 0).toLocaleString('ar-SA')}</td><td>—</td><td>${money(i.COST_PRICE)}</td><td><span class="status paid">نشط</span></td><td><button class="row-menu">•••</button></td></tr>`).join('') : dataStateRow(8, 'لا توجد أصناف في Oracle', 'يمكن تغيير المرشحات أو إضافة صنف جديد.', 'empty'); return; }
+    if (!$('module-body')) return;
     const mapped = view === 'accounts' ? rows.map(a => [a.ACCOUNT_CODE || a.A_CODE, a.ACCOUNT_NAME_AR || a.A_NAME, a.ACCOUNT_TYPE || a.A_LEVEL || '', money(a.OPENING_BALANCE ?? a.DR)]) : view === 'contacts' ? rows.map(c => [c.CODE || c.C_CODE || '', c.NAME_AR || c.C_A_NAME || '', c.CONTACT_TYPE || 'CUSTOMER', c.PHONE || c.C_PHONE || c.C_MOBILE || '']) : view === 'inventory' ? rows.map(i => [i.ITEM_CODE, i.ITEM_NAME_AR, i.UNIT_NAME, i.QUANTITY, money(i.COST_PRICE)]) : rows.map(j => [j.DOC_NO || j.JV_NO || '', j.DOC_DATE || j.AD_DATE || '', j.DOC_DESC || j.DESCRIPTION || '', money(j.DEBIT || j.DR), money(j.CREDIT || j.CR), '<span class="status paid">مستورد</span>']);
-    $('module-body').innerHTML = renderRows(mapped);
+    $('module-body').innerHTML = renderRows(mapped, mapped.length ? mapped[0].length : 8, { empty: 'لا توجد سجلات في Oracle ضمن المرشحات الحالية.' });
     const count = document.querySelector('.table-tools span'); if (count) count.textContent = `${rows.length} سجل من Oracle`;
-  } catch (error) { console.warn('Oracle module read unavailable:', error.message); }
+  } catch (error) {
+    const body = $('module-body');
+    if (body) body.innerHTML = dataStateRow(8, 'تعذر تحميل بيانات Oracle', error.message, 'error');
+    const count = document.querySelector('.table-tools span');
+    if (count) count.textContent = 'تعذر التحميل';
+    showToast('تعذر تحميل بيانات Oracle. راجع الاتصال والصلاحيات.', 'error');
+    console.warn('Oracle module read unavailable:', error.message);
+  }
 }
 
 async function refreshDashboardMetrics() {
@@ -508,10 +554,15 @@ async function refreshDashboardMetrics() {
       if (cards[0]) cards[0].innerHTML = `${Number(data.journals || 0).toLocaleString('ar-SA')} <small>عملية</small>`;
       if (cards[1]) cards[1].innerHTML = `${Number(data.accounts || 0).toLocaleString('ar-SA')} <small>حساب</small>`;
       if (cards[2]) cards[2].innerHTML = `${Number(data.customers || 0).toLocaleString('ar-SA')} <small>جهة</small>`;
+      renderOracleDashboardState();
+      const labels = document.querySelectorAll('.metric-top > span:first-child');
+      ['القيود المرحّلة', 'الحسابات', 'الجهات', 'مصدر البيانات'].forEach((label, index) => { if (labels[index]) labels[index].textContent = label; });
+      if (cards[3]) cards[3].innerHTML = '<span class="status info">Oracle متصل</span>';
       return;
     } catch (error) {
-      console.error('Oracle dashboard read failed; demo metrics were not shown:', error);
-      showToast('تعذر تحديث مؤشرات Oracle. لم تُعرض مؤشرات تجريبية بدلًا منها.');
+      renderOracleDashboardState();
+      console.error('Oracle dashboard read failed; live metrics unavailable:', error);
+      showToast('تعذر تحديث مؤشرات Oracle؛ لم تُعرض بيانات تجريبية.', 'error');
       return;
     }
   }
