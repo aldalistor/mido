@@ -247,6 +247,10 @@ function openForm(view) {
   const titles = { journal: 'قيد يومية جديد', accounts: 'إضافة حساب', sales: 'فاتورة مبيعات جديدة', purchases: 'فاتورة مشتريات جديدة', inventory: 'إضافة صنف جديد', contacts: 'إضافة جهة اتصال' };
   const form = $('form-modal');
   $('modal-title').textContent = titles[view] || 'سجل جديد';
+  if (view === 'sales') {
+    $('modal-fields').innerHTML = `<label>اسم العميل<input name="party" placeholder="ابحث أو اكتب اسم العميل" required /></label><div class="item-lookup-field"><label>الصنف</label><input id="sales-item-search" autocomplete="off" placeholder="ابحث بالاسم أو الرقم أو أي حرف..." /><input name="itemCode" id="sales-item-code" type="hidden" required /><div id="sales-item-results" class="item-search-results"></div><div id="sales-item-preview" class="selected-item-preview"><span>▤</span><div><strong>لم يتم اختيار صنف</strong><small>ابدأ بكتابة اسم الصنف أو رمزه</small></div></div></div><label>الكمية<input name="quantity" type="number" min="0.01" step="0.01" value="1" required /></label><label>سعر البيع<input name="unitPrice" id="sales-unit-price" type="number" min="0" step="0.01" required /></label><div class="sales-entry-summary"><span>التكلفة: <b id="sales-item-cost">—</b></span><span>المتاح: <b id="sales-item-stock">—</b></span><strong>الإجمالي: <b id="sales-item-total">0 ر.س</b></strong></div>`;
+    form.dataset.view = view; form.classList.add('open'); setupSalesItemLookup(); return;
+  }
   const fields = {
     journal: [['description', 'البيان'], ['debitAccount', 'الحساب المدين'], ['creditAccount', 'الحساب الدائن'], ['amount', 'المبلغ', 'number']],
     accounts: [['code', 'رمز الحساب'], ['name', 'اسم الحساب'], ['type', 'نوع الحساب']],
@@ -258,6 +262,14 @@ function openForm(view) {
   $('modal-fields').innerHTML = fields.map(([name, label, type = 'text']) => `<label>${label}<input name="${name}" type="${type}" step="0.01" required /></label>`).join('');
   form.dataset.view = view;
   form.classList.add('open');
+}
+
+function setupSalesItemLookup() {
+  const search = $('sales-item-search'); const results = $('sales-item-results'); const code = $('sales-item-code'); const price = $('sales-unit-price'); const qty = document.querySelector('#modal-fields input[name="quantity"]'); const preview = $('sales-item-preview');
+  const render = () => { const query = search.value.trim().toLowerCase(); const matches = state.items.filter(item => !query || `${item.code} ${item.name} ${item.unit}`.toLowerCase().includes(query)).slice(0, 8); results.innerHTML = matches.length ? matches.map(item => `<button type="button" class="item-result" data-item-code="${esc(item.code)}"><span class="item-result-icon">▤</span><span><strong>${esc(item.name)}</strong><small>${esc(item.code)} · ${esc(item.unit)}</small></span><b>${Number(item.qty).toLocaleString('ar-SA')} متاح</b><em>${money(item.sale)}</em></button>`).join('') : '<div class="item-no-results">لا توجد أصناف مطابقة للبحث</div>'; results.classList.add('visible'); results.querySelectorAll('.item-result').forEach(button => button.addEventListener('click', () => selectItem(button.dataset.itemCode))); };
+  const selectItem = itemCode => { const item = state.items.find(i => i.code === itemCode); if (!item) return; code.value = item.code; search.value = `${item.name} · ${item.code}`; price.value = item.sale; preview.innerHTML = `<span class="selected-item-icon">✓</span><div><strong>${esc(item.name)}</strong><small>${esc(item.code)} · ${esc(item.unit)} · تكلفة ${money(item.cost)}</small></div><b>${Number(item.qty).toLocaleString('ar-SA')} متاح</b>`; results.classList.remove('visible'); updateTotal(); };
+  const updateTotal = () => { const item = state.items.find(i => i.code === code.value); const quantity = Number(qty.value || 0); $('sales-item-cost').textContent = item ? money(item.cost) : '—'; $('sales-item-stock').textContent = item ? `${Number(item.qty).toLocaleString('ar-SA')} ${item.unit}` : '—'; $('sales-item-total').textContent = money(quantity * Number(price.value || 0)); };
+  search.addEventListener('focus', render); search.addEventListener('input', render); price.addEventListener('input', updateTotal); qty.addEventListener('input', updateTotal); document.addEventListener('click', event => { if (!event.target.closest('.item-lookup-field')) results.classList.remove('visible'); }, { once: true }); updateTotal();
 }
 
 function closeForm() { $('form-modal').classList.remove('open'); }
