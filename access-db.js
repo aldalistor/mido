@@ -45,9 +45,8 @@ async function createMdbIfNeeded() {
   if (fs.existsSync(dbPath)) return;
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   if (process.platform !== 'win32') throw new Error(`ملف MDB غير موجود. سيُنشأ تلقائيًا على Windows، والمسار المتوقع: ${dbPath}`);
-  const script = process.resourcesPath && process.resourcesPath !== path.dirname(__filename)
-    ? path.join(process.resourcesPath, 'create-mdb.ps1')
-    : path.join(__dirname, 'create-mdb.ps1');
+  const packagedScript = process.resourcesPath ? path.join(process.resourcesPath, 'create-mdb.ps1') : '';
+  const script = packagedScript && fs.existsSync(packagedScript) ? packagedScript : path.join(__dirname, 'create-mdb.ps1');
   const { execFileSync } = require('child_process');
   execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Path', dbPath], { stdio: 'pipe' });
 }
