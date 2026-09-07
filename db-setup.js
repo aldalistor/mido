@@ -11,8 +11,8 @@ const oracleMigrations = [
   'oracle/migrations/010_audit_immutability.sql',
   'oracle/migrations/011_document_cycle.sql',
   'oracle/migrations/012_document_payment_terms.sql',
-  'oracle/migrations/014_commercial_invoice_workflow.sql',
-  'oracle/migrations/013_invoice_permissions.sql'
+  'oracle/migrations/013_invoice_permissions.sql',
+  'oracle/migrations/014_commercial_invoice_workflow.sql'
 ];
 
 function normalize(config = {}) {
