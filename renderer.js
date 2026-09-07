@@ -145,7 +145,7 @@ function renderPurchasesWorkspace() {
   $('purchase-report').addEventListener('click', () => showToast('تم تجهيز تقرير المشتريات للفترة الحالية'));
   $('new-purchase-order').addEventListener('click', () => showToast('سيتم فتح شاشة أمر الشراء عند تفعيل دورة الاعتماد'));
   $('new-purchase-return').addEventListener('click', () => showToast('اختر فاتورة شراء لتسجيل المرتجع'));
-  $('new-supplier-payment').addEventListener('click', () => showToast('سيتم فتح سند صرف للمورد'));
+  $('new-supplier-payment').addEventListener('click', () => openForm('ap-payment'));
   document.querySelectorAll('.purchase-tab').forEach(tab => tab.addEventListener('click', () => { document.querySelectorAll('.purchase-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active'); if (tab.dataset.purchaseTab !== 'invoices') showToast(`شاشة ${tab.textContent.trim()} جاهزة للتوسع`); }));
   $('purchase-search').addEventListener('input', event => { const q = event.target.value.toLowerCase(); $('purchase-body').innerHTML = purchaseRows(purchases.filter(i => `${i.ref} ${i.party}`.toLowerCase().includes(q))); });
 }
@@ -191,7 +191,7 @@ function renderSalesWorkspace() {
   $('sales-report').addEventListener('click', () => showToast('تم تجهيز تقرير المبيعات للفترة الحالية'));
   $('new-sales-quote').addEventListener('click', () => showToast('تم فتح شاشة عروض الأسعار'));
   $('new-sales-return').addEventListener('click', () => showToast('اختر فاتورة مبيعات لتسجيل المرتجع'));
-  $('new-customer-receipt').addEventListener('click', () => showToast('سيتم فتح سند قبض للعميل'));
+  $('new-customer-receipt').addEventListener('click', () => openForm('ar-receipt'));
   $('view-customers').addEventListener('click', () => showToast('تم فتح قائمة العملاء'));
   document.querySelectorAll('.sales-tab').forEach(tab => tab.addEventListener('click', () => { document.querySelectorAll('.sales-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active'); if (tab.dataset.salesTab !== 'invoices') showToast(`شاشة ${tab.textContent.trim()} جاهزة للتوسع`); }));
   $('sales-search').addEventListener('input', event => { const q = event.target.value.toLowerCase(); $('sales-body').innerHTML = salesRows(sales.filter(i => `${i.ref} ${i.party}`.toLowerCase().includes(q))); });
@@ -298,10 +298,11 @@ function renderModule(view) {
 }
 
 function openForm(view) {
-  const titles = { journal: 'قيد يومية جديد', accounts: 'إضافة حساب', sales: 'فاتورة مبيعات جديدة', purchases: 'فاتورة مشتريات جديدة', inventory: 'إضافة صنف جديد', contacts: 'إضافة جهة اتصال', 'cash-receipt': 'سند قبض جديد', 'cash-payment': 'سند صرف جديد', expense: 'مصروف جديد', income: 'إيراد جديد' };
+  const titles = { journal: 'قيد يومية جديد', accounts: 'إضافة حساب', sales: 'فاتورة مبيعات جديدة', purchases: 'فاتورة مشتريات جديدة', inventory: 'إضافة صنف جديد', contacts: 'إضافة جهة اتصال', 'cash-receipt': 'سند قبض جديد', 'cash-payment': 'سند صرف جديد', 'ar-receipt': 'تحصيل من عميل', 'ap-payment': 'سداد لمورد', expense: 'مصروف جديد', income: 'إيراد جديد' };
   const form = $('form-modal');
   $('modal-title').textContent = titles[view] || 'سجل جديد';
-  if (['cash-receipt', 'cash-payment', 'expense', 'income'].includes(view)) {
+  if (['cash-receipt', 'cash-payment', 'expense', 'income', 'ar-receipt', 'ap-payment'].includes(view)) {
+    if (view === 'ar-receipt' || view === 'ap-payment') { const fields = [['contactCode', view === 'ar-receipt' ? 'رمز العميل' : 'رمز المورد'], ['cashAccountCode', 'حساب الصندوق أو البنك'], ['invoiceNo', 'رقم الفاتورة'], ['allocationAmount', 'المبلغ المخصص', 'number'], ['amount', 'إجمالي الدفعة', 'number'], ['paymentDate', 'تاريخ الدفعة', 'date'], ['description', 'البيان']]; $('modal-fields').innerHTML = fields.map(([name, label, type = 'text']) => `<label>${label}<input name="${name}" type="${type}" step="0.01" value="${type === 'date' ? new Date().toISOString().slice(0, 10) : ''}" required /></label>`).join(''); form.dataset.view = view; form.classList.add('open'); return; }
     const isCash = view.startsWith('cash-');
     const fields = isCash ? [['cashAccountCode', 'حساب الصندوق أو البنك'], ['accountCode', view === 'cash-receipt' ? 'الحساب المقابل' : 'حساب المصروف أو الجهة'], ['amount', 'المبلغ', 'number'], ['voucherDate', 'التاريخ', 'date'], ['description', 'البيان']] : [['cashAccountCode', 'حساب الصندوق أو البنك'], [view === 'income' ? 'incomeAccountCode' : 'expenseAccountCode', view === 'income' ? 'حساب الإيراد' : 'حساب المصروف'], ['amount', 'المبلغ', 'number'], ['operationDate', 'التاريخ', 'date'], ['description', 'البيان']];
     $('modal-fields').innerHTML = fields.map(([name, label, type = 'text']) => `<label>${label}<input name="${name}" type="${type}" step="0.01" value="${type === 'date' ? new Date().toISOString().slice(0, 10) : ''}" required /></label>`).join('');
@@ -435,6 +436,7 @@ $('entry-form').addEventListener('submit', async event => {
       else if (view === 'contacts') await window.onyxAPI.createContact({ code: data.code, name: data.name, type: data.type.includes('مورد') ? 'VENDOR' : 'CUSTOMER', phone: data.phone, email: data.email });
       else if (view === 'journal') await window.onyxAPI.createJournal({ description: data.description, lines: [{ accountCode: data.debitAccount, debit: Number(data.amount), credit: 0 }, { accountCode: data.creditAccount, debit: 0, credit: Number(data.amount) }] });
       else if (view === 'cash-receipt' || view === 'cash-payment') await window.onyxAPI.createCashVoucher({ voucherType: view === 'cash-receipt' ? 'RECEIPT' : 'PAYMENT', cashAccountCode: data.cashAccountCode, lines: [{ accountCode: data.accountCode, amount: Number(data.amount), description: data.description }], voucherDate: data.voucherDate, description: data.description });
+      else if (view === 'ar-receipt' || view === 'ap-payment') { const result = await window.onyxAPI.createReceivablePayment({ paymentType: view === 'ar-receipt' ? 'RECEIPT' : 'PAYMENT', contactCode: data.contactCode, cashAccountCode: data.cashAccountCode, amount: Number(data.amount), paymentDate: data.paymentDate, description: data.description, allocations: [{ invoiceNo: data.invoiceNo, amount: Number(data.allocationAmount) }] }); await window.onyxAPI.postReceivablePayment({ paymentId: result.paymentId }); }
       else if (view === 'expense' || view === 'income') await window.onyxAPI.createExpenseIncome({ operationType: view === 'income' ? 'INCOME' : 'EXPENSE', cashAccountCode: data.cashAccountCode, [view === 'income' ? 'incomeAccountCode' : 'expenseAccountCode']: data.incomeAccountCode || data.expenseAccountCode, amount: Number(data.amount), description: data.description, operationDate: data.operationDate });
       else if (view === 'sales' || view === 'purchases') { const invoiceType = view === 'sales' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE'; if (data.documentType && data.documentType !== invoiceType) await window.onyxAPI.createTradeDocument({ documentType: data.documentType, contactCode: data.partyCode || data.party, currencyCode: data.currency || 'SAR', exchangeRate: data.exchangeRate, documentDate: data.invoiceDate, paymentMethod: data.paymentMethod, dueDate: data.dueDate || null, documentNote: data.documentNote || null, lines: data.lines }); else await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.partyCode || data.party, currency: data.currency || 'SAR', exchangeRate: data.exchangeRate, warehouseCode: data.warehouseCode || null, taxAmount: data.taxAmount, invoiceDate: data.invoiceDate, lines: data.lines }); }
     } else {
