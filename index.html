@@ -7,7 +7,17 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <section id="login-screen" class="login-screen">
+  <section id="database-onboarding" class="login-screen">
+    <div class="login-card onboarding-card">
+      <div class="login-brand"><div class="brand-mark">أ</div><div><strong>أونكس ERP</strong><span>تهيئة قاعدة البيانات</span></div></div>
+      <div class="login-kicker">الخطوة الأولى بعد تثبيت النظام</div>
+      <h1>إنشاء قاعدة بيانات النظام</h1>
+      <p>سيتم إنشاء ملف Microsoft Access كامل، والجداول والعملات ودليل الحسابات والفروع والسنة المالية.</p>
+      <form id="onboarding-form"><label>اسم الشركة<input id="setup-company-name" value="شركتي" required /></label><label>رمز الشركة<input id="setup-company-code" value="MAIN" required /></label><label>اسم الفرع الرئيسي<input id="setup-branch-name" value="الفرع الرئيسي" required /></label><label>السنة المالية<input id="setup-fiscal-year" type="number" value="2026" min="2000" max="2100" required /></label><label>مسار ملف Access (اختياري)<input id="setup-access-file" placeholder="يُنشأ تلقائيًا داخل مجلد بيانات التطبيق" /></label><div id="onboarding-error" class="login-error"></div><button class="primary-button login-submit" type="submit">إنشاء قاعدة البيانات والبدء</button></form>
+      <small class="login-security">يتطلب Windows تثبيت Microsoft Access Database Engine 64-bit</small>
+    </div>
+  </section>
+  <section id="login-screen" class="login-screen hidden">
     <div class="login-card">
       <div class="login-brand"><div class="brand-mark">أ</div><div><strong>أونكس</strong><span>المحاسبي</span></div></div>
       <div class="login-kicker">منصة الإدارة المالية والتشغيلية</div>
@@ -40,7 +50,7 @@
         <button class="nav-item" data-view="expenses"><span class="nav-icon">↘</span><span>المصروفات والإيرادات</span></button>
         <button class="nav-item" data-view="contacts"><span class="nav-icon">♙</span><span>العملاء والموردون</span></button>
       </nav>
-      <div class="sidebar-bottom"><button class="nav-item" data-view="security"><span class="nav-icon">⚙</span><span>المستخدمون والصلاحيات</span></button><button class="nav-item" data-view="database"><span class="nav-icon">◉</span><span>تهيئة قاعدة البيانات</span></button><div class="user-mini"><div class="avatar">م</div><div><strong>محمد العتيبي</strong><span>مدير النظام</span></div><span class="dots">•••</span></div></div>
+      <div class="sidebar-bottom"><button class="nav-item" data-view="security"><span class="nav-icon">⚙</span><span>المستخدمون والصلاحيات</span></button><button class="nav-item" data-view="settings"><span class="nav-icon">⌘</span><span>إعدادات النظام</span></button><button class="nav-item" data-view="database"><span class="nav-icon">◉</span><span>تهيئة قاعدة البيانات</span></button><div class="user-mini"><div class="avatar">م</div><div><strong>محمد العتيبي</strong><span>مدير النظام</span></div><span class="dots">•••</span></div></div>
     </aside>
 
     <main class="main-content">

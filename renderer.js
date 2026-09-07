@@ -1,7 +1,7 @@
 const labels = {
   dashboard: 'لوحة التحكم', journal: 'القيود اليومية', accounts: 'دليل الحسابات',
   reports: 'التقارير المالية', revaluation: 'إعادة تقييم العملات', 'year-close': 'إقفال السنة المالية', sales: 'المبيعات', purchases: 'المشتريات',
-  inventory: 'المخزون', cash: 'الصندوق والبنوك', expenses: 'المصروفات والإيرادات', contacts: 'العملاء والموردون', security: 'المستخدمون والصلاحيات', database: 'تهيئة قاعدة البيانات'
+  inventory: 'المخزون', cash: 'الصندوق والبنوك', expenses: 'المصروفات والإيرادات', contacts: 'العملاء والموردون', security: 'المستخدمون والصلاحيات', database: 'تهيئة قاعدة البيانات', settings: 'إعدادات النظام'
 };
 
 const seed = {
@@ -95,8 +95,9 @@ function switchView(view) {
   $('page-title').textContent = labels[view] || 'الوحدة';
   $('generic-title').textContent = labels[view] || 'الوحدة';
   if (view === 'security') renderSecurity();
+  else if (view === 'settings') renderSettingsWorkspace();
   else if (view !== 'dashboard') renderModule(view);
-  if (view !== 'dashboard' && dataMode === 'oracle') setTimeout(() => loadLiveRows(view), 0);
+  if (view !== 'dashboard' && (dataMode === 'oracle' || dataMode === 'access')) setTimeout(() => loadLiveRows(view), 0);
 }
 
 function openScreenTab(view) {
@@ -137,8 +138,8 @@ function renderOracleModuleShell(view) {
   const configs = {
     journal: { title: 'القيود اليومية', action: 'قيد جديد', columns: ['الرقم', 'التاريخ', 'البيان', 'مدين', 'دائن', 'الحالة'], colspan: 6 },
     accounts: { title: 'دليل الحسابات', action: 'حساب جديد', columns: ['الرمز', 'اسم الحساب', 'النوع', 'الرصيد'], colspan: 4 },
-    sales: { title: 'المبيعات', action: 'فاتورة مبيعات', columns: ['المرجع', 'العميل', 'التاريخ', 'الإجمالي', 'المستحق', 'الحالة'], colspan: 6 },
-    purchases: { title: 'المشتريات', action: 'فاتورة مشتريات', columns: ['المرجع', 'المورد', 'التاريخ', 'الإجمالي', 'المستحق', 'الحالة'], colspan: 6 },
+    sales: { title: 'المبيعات', action: 'فاتورة مبيعات', columns: ['المرجع', 'العميل', 'التاريخ', 'الإجمالي', 'المستحق', 'الحالة', 'إجراء'], colspan: 7 },
+    purchases: { title: 'المشتريات', action: 'فاتورة مشتريات', columns: ['المرجع', 'المورد', 'التاريخ', 'الإجمالي', 'المستحق', 'الحالة', 'إجراء'], colspan: 7 },
     inventory: { title: 'المخزون', action: 'إضافة صنف', columns: ['الصنف', 'الرمز', 'الوحدة', 'المتاح', 'محجوز', 'متوسط التكلفة', 'الحالة', 'الإجراءات'], colspan: 8 },
     contacts: { title: 'العملاء والموردون', action: 'إضافة جهة', columns: ['الرمز', 'الاسم', 'النوع', 'الهاتف'], colspan: 4 }
   };
@@ -287,6 +288,11 @@ function renderYearCloseWorkspace() {
   $('finalize-year-close').addEventListener('click', () => { state.entries.unshift({ no: `YC-${String(state.entries.length + 1).padStart(4, '0')}`, date: '2024-12-31', description: 'قيد إقفال السنة وترحيل الأرصدة الافتتاحية', debit: revenue + expenses, credit: revenue + expenses, status: 'مرحّل', source: 'YEAR_CLOSE' }); save(); showToast('تم اعتماد قيد الإقفال وإنشاء الأرصدة الافتتاحية'); });
 }
 
+function renderSettingsWorkspace() {
+  $('generic-content').innerHTML = `<div class="module-toolbar accounting-toolbar"><div><p class="eyebrow">الإدارة / إعدادات النظام</p><h2>إعدادات الشركة والفرع</h2><p class="toolbar-description">تعديل بيانات مساحة العمل والعملة الأساسية وسياسات الترقيم.</p></div><div class="toolbar-actions"><button class="primary-button" id="save-system-settings">حفظ الإعدادات</button></div></div><div class="panel db-config-panel"><div class="db-form-grid"><label>اسم الشركة<input id="settings-company-name" value="شركتي" /></label><label>رمز الشركة<input id="settings-company-code" value="MAIN" /></label><label>اسم الفرع الافتراضي<input id="settings-branch-name" value="الفرع الرئيسي" /></label><label>رمز الفرع<input id="settings-branch-code" value="MAIN" /></label><label>السنة المالية<input id="settings-fiscal-year" type="number" value="2026" /></label><label>العملة الأساسية<input id="settings-base-currency" value="SAR" /></label><label>بادئة الفواتير<input id="settings-invoice-prefix" value="INV-" /></label><label>نسبة الضريبة<input id="settings-tax-rate" type="number" min="0" step="0.01" value="0" /></label></div><div id="settings-result" class="db-test-result"></div></div>`;
+  $('save-system-settings').onclick = async () => { const result = $('settings-result'); try { const base = { filePath: (await window.onyxAPI.accessStatus()).filePath }; await window.onyxAPI.accessUpdateCompany({ ...base, name: $('settings-company-name').value, code: $('settings-company-code').value }); await window.onyxAPI.accessUpdateBranch({ ...base, name: $('settings-branch-name').value, code: $('settings-branch-code').value }); await window.onyxAPI.accessUpdateFiscalYear({ ...base, year: $('settings-fiscal-year').value }); await window.onyxAPI.accessUpdateSetting({ ...base, key: 'BASE_CURRENCY', value: $('settings-base-currency').value }); await window.onyxAPI.accessUpdateSetting({ ...base, key: 'INVOICE_PREFIX', value: $('settings-invoice-prefix').value }); await window.onyxAPI.accessUpdateSetting({ ...base, key: 'TAX_RATE', value: $('settings-tax-rate').value }); result.className = 'db-test-result success'; result.textContent = '✓ تم حفظ إعدادات الشركة والفرع والسنة المالية.'; showToast('تم حفظ إعدادات النظام', 'success'); } catch (error) { result.className = 'db-test-result error'; result.textContent = error.message; } };
+}
+
 function renderDatabaseWorkspace() {
   $('generic-content').innerHTML = `<div class="module-toolbar accounting-toolbar"><div><p class="eyebrow">الإدارة / البنية التقنية</p><h2>تهيئة قاعدة البيانات</h2><p class="toolbar-description">أنشئ اتصال النظام وتهيئة المخطط المحاسبي حسب بيئة العمل المطلوبة</p></div><div class="toolbar-actions"><button class="secondary-button" id="db-backup">⇩ نسخة احتياطية</button><button class="primary-button" id="db-save-config">حفظ الإعدادات</button></div></div><div class="db-setup-steps"><div class="db-step active"><b>1</b><span>نوع قاعدة البيانات</span></div><i></i><div class="db-step"><b>2</b><span>بيانات الاتصال</span></div><i></i><div class="db-step"><b>3</b><span>مخطط المحاسبة</span></div><i></i><div class="db-step"><b>4</b><span>التحقق والتشغيل</span></div></div><div class="db-setup-grid"><section class="panel db-config-panel"><div class="workspace-heading"><div><span class="section-kicker">مصدر البيانات</span><h3>اختر محرك قاعدة البيانات</h3><p>يمكن تغيير الاتصال لاحقًا دون فقد البيانات بعد أخذ نسخة احتياطية.</p></div><span class="db-config-status"><i></i> غير مهيأ</span></div><div class="db-engine-cards"><button class="db-engine selected" data-engine="oracle"><span class="db-engine-icon oracle">O</span><strong>Oracle Database</strong><small>مناسب للبيئات المؤسسية</small><b>موصى به</b></button><button class="db-engine" data-engine="sqlserver"><span class="db-engine-icon sql">S</span><strong>SQL Server</strong><small>اتصال عبر SQL Server</small></button><button class="db-engine" data-engine="access"><span class="db-engine-icon access">A</span><strong>Microsoft Access</strong><small>ملف محلي بصيغة .accdb</small></button></div><div class="db-form-heading"><span class="section-kicker">بيانات الاتصال</span><h3 id="db-form-title">اتصال Oracle</h3></div><div class="db-form-grid"><label>اسم الاتصال<input id="db-connection-name" value="الاتصال الرئيسي" /></label><label>اسم المستخدم<input id="db-username" placeholder="SYSTEM أو اسم المستخدم" /></label><label>كلمة المرور<input id="db-password" type="password" placeholder="كلمة المرور" /></label><label>اسم الخادم / Host<input id="db-host" value="localhost" /></label><label>المنفذ<input id="db-port" value="1521" /></label><label>اسم الخدمة / SID<input id="db-service" value="ORCL" /></label><label class="db-full-field">مسار ملف قاعدة البيانات (لـ Access)<input id="db-file" placeholder="C:\\data\\mido.accdb" disabled /></label></div><div class="db-actions"><button class="secondary-button" id="db-test">اختبار الاتصال</button><button class="primary-button" id="db-next">حفظ والانتقال للتهيئة ←</button></div><div id="db-test-result" class="db-test-result"></div><div id="db-live-log" class="db-live-log"><div class="db-log-head"><span>سجل الاختبار</span><small>جاهز</small></div><div class="db-log-line"><i class="log-dot idle"></i><span>بانتظار بدء اختبار الاتصال</span><time>—</time></div></div></section><aside class="db-setup-side"><div class="panel db-security-note"><div class="db-note-icon">✓</div><h3>تهيئة آمنة</h3><p>بيانات كلمة المرور لا تُحفظ في الواجهة. يتم تمريرها إلى طبقة الاتصال المشفرة عند تفعيل الموصل المناسب.</p><div class="db-check">✓ فحص صلاحيات إنشاء الجداول</div><div class="db-check">✓ اختبار المعاملات والـ rollback</div><div class="db-check">✓ التحقق من توازن القيد</div></div><div class="panel db-current-card"><div class="workspace-heading"><div><span class="section-kicker">الاتصال الحالي</span><h3>حالة النظام</h3></div></div><div class="current-db-row"><span class="current-db-icon">◉</span><div><strong id="current-db-name">الوضع التجريبي</strong><small id="current-db-detail">لا يوجد اتصال إنتاجي محفوظ</small></div><span class="status pending">تجريبي</span></div><button class="text-button" id="db-open-schema">عرض مخطط الجداول ←</button></div><div class="panel db-security-note db-environment-card"><div class="workspace-heading"><div><span class="section-kicker">بيئة التشغيل</span><h3>جاهزية الموصلات</h3></div></div><div class="connector-status"><span class="connector-mark ready">✓</span><div><strong>Oracle</strong><small>متصل عبر oracledb</small></div><b>جاهز</b></div><div class="connector-status"><span class="connector-mark ready">✓</span><div><strong>SQL Server</strong><small>mssql 12 · TCP</small></div><b>جاهز</b></div><div class="connector-status"><span class="connector-mark ready">✓</span><div><strong>Access / ODBC</strong><small>ODBC 2.5 · ملف محلي</small></div><b>جاهز</b></div></div></aside></div><div class="panel db-schema-preview"><div class="workspace-heading"><div><span class="section-kicker">المخطط المحاسبي</span><h3>الوحدات والجداول التي سيتم تهيئتها</h3></div><span class="schema-count">18 جدولًا · 42 قيدًا</span></div><div class="schema-grid"><div><strong>البيانات الأساسية</strong><span>الشركات والفروع · المستخدمون والأدوار · العملات والضرائب</span></div><div><strong>المحاسبة العامة</strong><span>دليل الحسابات · القيود · الفترات · مراكز التكلفة</span></div><div><strong>المبيعات والمشتريات</strong><span>الفواتير · العملاء والموردون · الدفعات · المرتجعات</span></div><div><strong>المخزون</strong><span>الأصناف · المستودعات · حركات المخزون · الجرد</span></div></div></div>`;
   let engine = 'oracle';
@@ -310,7 +316,7 @@ async function renderExpensesWorkspace() {
 }
 
 function renderModule(view) {
-  if (dataMode === 'oracle' && renderOracleModuleShell(view)) return;
+  if ((dataMode === 'oracle' || dataMode === 'access') && renderOracleModuleShell(view)) return;
   if (view === 'cash') return renderCashWorkspace();
   if (view === 'expenses') return renderExpensesWorkspace();
   if (view === 'accounts') return renderAccountsWorkspace();
@@ -567,11 +573,15 @@ function setDemoMode() {
 async function refreshDbStatus() {
   const status = $('db-status');
   if (!status) return false;
+  if (window.onyxAPI?.accessStatus) {
+    try { const access = await window.onyxAPI.accessStatus(); if (access.configured) { dataMode = 'access'; status.className = 'db-status connected'; status.innerHTML = '<i></i> Access: متصل'; return true; } } catch (_) {}
+  }
   if (dataMode === 'demo') { status.classList.add('demo'); status.innerHTML = '<i></i> وضع تجريبي'; return false; }
   if (!window.onyxAPI?.dbTest) { setDemoMode(); return false; }
   status.classList.add('checking'); status.innerHTML = '<i></i> جارٍ الاتصال';
   try {
     const info = await window.onyxAPI.dbTest();
+    if (!info.connected) throw new Error(info.reason || 'Oracle غير متصل');
     dataMode = 'oracle';
     document.body.classList.add('oracle-live');
     status.classList.remove('checking', 'demo'); status.classList.add('connected'); status.innerHTML = `<i></i> Oracle: ${esc(info.DB_USER)}`;
@@ -580,6 +590,16 @@ async function refreshDbStatus() {
 }
 
 async function loadLiveRows(view) {
+  if (dataMode === 'access' && window.onyxAPI?.accessList) {
+    try {
+      const entity = view === 'accounts' ? 'accounts' : view === 'contacts' ? 'contacts' : view === 'inventory' ? 'items' : view === 'sales' || view === 'purchases' ? 'invoices' : view === 'journal' ? 'journals' : null;
+      if (!entity) return;
+      const rows = await window.onyxAPI.accessList({ entity, search: $('module-search')?.value || '' });
+      if (view === 'sales' || view === 'purchases') { const body = $(view === 'sales' ? 'sales-body' : 'purchase-body'); const filtered = rows.filter(i => String(i.INVOICE_TYPE || '').toUpperCase() === (view === 'sales' ? 'SALE' : 'PURCHASE')); if (body) { body.innerHTML = renderRows(filtered.map(i => [i.INVOICE_NO, i.CONTACT_ID || '—', i.INVOICE_TYPE, money(i.TOTAL_AMOUNT), money(i.BASE_TOTAL_AMOUNT), `<span class="status ${i.STATUS_CODE === 'POSTED' ? 'paid' : i.STATUS_CODE === 'VOIDED' ? 'danger' : 'pending'}">${esc(i.STATUS_CODE)}</span>`, i.STATUS_CODE === 'POSTED' ? `<button class="text-button access-void-invoice" data-id="${i.INVOICE_ID}">إلغاء</button>` : i.STATUS_CODE === 'VOIDED' ? '—' : `<button class="text-button access-post-invoice" data-id="${i.INVOICE_ID}">ترحيل</button>`]), 7, { empty: 'لا توجد فواتير Access.' }); body.querySelectorAll('.access-post-invoice').forEach(button => button.addEventListener('click', async () => { button.disabled = true; try { const result = await window.onyxAPI.accessPostInvoice({ invoiceId: Number(button.dataset.id) }); showToast(`تم ترحيل ${result.invoiceNo} وإنشاء القيد ${result.entryNo} وتحديث المخزون`, 'success'); await loadLiveRows(view); } catch (error) { showToast(error.message, 'error'); button.disabled = false; } })); body.querySelectorAll('.access-void-invoice').forEach(button => button.addEventListener('click', async () => { const reason = prompt('أدخل سبب إلغاء الفاتورة:'); if (!reason || !reason.trim()) return; button.disabled = true; try { const result = await window.onyxAPI.accessVoidInvoice({ invoiceId: Number(button.dataset.id), reason: reason.trim(), userName: 'admin' }); showToast(`تم إلغاء ${result.invoiceNo} وإنشاء القيد العكسي ${result.reversalEntryNo}`, 'success'); await loadLiveRows(view); } catch (error) { showToast(error.message, 'error'); button.disabled = false; } })); } return; }
+      const body = $('module-body'); if (body) { const mapped = view === 'accounts' ? rows.map(a => [a.ACCOUNT_CODE, a.ACCOUNT_NAME_AR, a.ACCOUNT_TYPE, money(a.OPENING_BALANCE)]) : view === 'contacts' ? rows.map(c => [c.CODE, c.NAME_AR, c.CONTACT_TYPE, c.PHONE || '']) : view === 'inventory' ? rows.map(i => [i.ITEM_CODE, i.ITEM_NAME_AR, i.UNIT_NAME, i.QUANTITY, money(i.COST_PRICE)]) : rows.map(j => [j.ENTRY_NO, j.ENTRY_DATE, j.DESCRIPTION_AR, j.CURRENCY_CODE, j.STATUS_CODE]); body.innerHTML = renderRows(mapped, mapped.length ? mapped[0].length : 6, { empty: 'لا توجد سجلات Access.' }); }
+      return;
+    } catch (error) { showToast(`تعذر تحميل Access: ${error.message}`, 'error'); return; }
+  }
   if (dataMode !== 'oracle' || !window.onyxAPI) return;
   try {
     let rows = [];
@@ -733,6 +753,7 @@ async function bootAuthentication() {
     if (stored) await completeLogin(JSON.parse(stored));
     return;
   }
+  if (dataMode === 'access') { $('login-title').textContent = 'تسجيل الدخول إلى Access ERP'; $('login-subtitle').textContent = 'الدخول الأولي: admin / demo123'; return; }
   try {
     const hasUsers = await window.onyxAPI.hasUsers();
     if (!hasUsers) { $('login-title').textContent = 'تهيئة مدير النظام'; $('login-subtitle').textContent = 'أنشئ أول مستخدم بصلاحيات كاملة للبدء'; $('setup-fields').classList.remove('hidden'); document.querySelector('.login-submit').textContent = 'إنشاء المدير والدخول'; }
@@ -762,6 +783,11 @@ $('login-form')?.addEventListener('submit', async event => {
       const session = { displayNameAr: user.displayNameAr, role: user.role, permissions: ['ALL'], roles: [{ ROLE_NAME_AR: user.role }] };
       sessionStorage.setItem('onyx-demo-session', JSON.stringify(session)); await completeLogin(session); showToast(`مرحباً ${session.displayNameAr}`); return;
     }
+    if (dataMode === 'access') {
+      if (username.toLowerCase() !== 'admin' || password !== 'demo123') throw new Error('بيانات دخول Access الأولية: admin / demo123');
+      const session = { displayNameAr: 'مدير النظام', username: 'admin', role: 'مدير النظام', permissions: ['ALL'], roles: [{ ROLE_NAME_AR: 'مدير النظام' }] };
+      sessionStorage.setItem('onyx-access-session', JSON.stringify(session)); await completeLogin(session); showToast('مرحباً مدير النظام'); return;
+    }
     if (!$('setup-fields').classList.contains('hidden')) { const displayNameAr = $('setup-display').value.trim(); const confirm = $('setup-confirm').value; if (password !== confirm) throw new Error('تأكيد كلمة المرور غير مطابق.'); await window.onyxAPI.createUser({ username, displayNameAr, password }); }
     const authenticated = await window.onyxAPI.login({ username, password });
     const session = await continueWithContext(authenticated);
@@ -770,4 +796,22 @@ $('login-form')?.addEventListener('submit', async event => {
 });
 
 document.querySelector('.user-mini')?.addEventListener('click', async () => { if (confirm('هل تريد تسجيل الخروج؟')) { sessionStorage.removeItem('onyx-demo-session'); if (window.onyxAPI) await window.onyxAPI.logout(); location.reload(); } });
-window.addEventListener('DOMContentLoaded', bootAuthentication);
+async function bootDatabaseOnboarding() {
+  const onboarding = $('database-onboarding');
+  const login = $('login-screen');
+  if (!onboarding || !window.onyxAPI?.accessStatus) { login?.classList.remove('hidden'); return; }
+  try {
+    const status = await window.onyxAPI.accessStatus();
+    if (status.configured) { onboarding.classList.add('hidden'); login.classList.remove('hidden'); return; }
+  } catch (_) {}
+  $('onboarding-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const error = $('onboarding-error'); error.textContent = '';
+    const button = event.target.querySelector('button[type="submit"]'); button.disabled = true; button.textContent = 'جارٍ إنشاء الملف والجداول...';
+    try {
+      const result = await window.onyxAPI.accessProvision({ filePath: $('setup-access-file').value.trim() || undefined, companyName: $('setup-company-name').value, companyCode: $('setup-company-code').value, branchName: $('setup-branch-name').value, fiscalYear: $('setup-fiscal-year').value });
+      onboarding.classList.add('hidden'); login.classList.remove('hidden'); showToast(`تم إنشاء قاعدة Access والإصدار ${result.version}`, 'success');
+    } catch (e) { error.textContent = e.message; button.disabled = false; button.textContent = 'إنشاء قاعدة البيانات والبدء'; }
+  });
+}
+window.addEventListener('DOMContentLoaded', async () => { await bootDatabaseOnboarding(); if (!$('database-onboarding') || $('database-onboarding').classList.contains('hidden')) bootAuthentication(); });
