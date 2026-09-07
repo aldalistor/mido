@@ -47,8 +47,13 @@
       "business-operations-core.js",
       "receivables-core.js",
       "period-close-core.js",
+      "access-db.js",
+      "create-mdb.ps1",
       "test-stage7-inventory-invoices.js",
       "assets/**/*"
+    ],
+    "extraResources": [
+      "create-mdb.ps1"
     ],
     "win": {
       "target": "nsis"

@@ -1,7 +1,8 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
-const db = require('./db');
+const db = String(process.env.ONYX_DB_ENGINE || 'access').toLowerCase() === 'oracle' ? require('./db') : require('./access-db');
+const accessDb = require('./access-db');
 const dbSetup = require('./db-setup');
 const sessionContext = require('./session-context');
 const commercialLicense = require('./commercial-license-core');
@@ -17,10 +18,10 @@ function enforceCommercialLicense(feature) {
   return commercialLicense.enforceEntitlement({ license, feature, currentUsers: 1, currentBranches: 1, options: { today: new Date().toISOString().slice(0, 10), publicKey: process.env.MIDO_LICENSE_PUBLIC_KEY || null } });
 }
 function registerDatabaseHandlers() {
-  ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.testConnection(payload); });
-  ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.inspectOracleSchema(payload); });
-  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.initializeSchema(payload); });
-  ipcMain.handle('db:test', () => { requirePermission('VIEW_DASHBOARD'); return db.test(); });
+  ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return db === accessDb ? accessDb.test() : dbSetup.testConnection(payload); });
+  ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return db === accessDb ? accessDb.test() : dbSetup.inspectOracleSchema(payload); });
+  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return db === accessDb ? accessDb.initialize() : dbSetup.initializeSchema(payload); });
+  ipcMain.handle('db:test', () => db.test());
   ipcMain.handle('db:dashboard', () => { requirePermission('VIEW_DASHBOARD'); return db.dashboard(); });
   ipcMain.handle('db:accounts', (_event, payload = {}) => { requirePermission('VIEW_ACCOUNTS'); return db.accounts(payload.search || ''); });
   ipcMain.handle('db:modern-accounts', (_event, payload = {}) => { requirePermission('VIEW_ACCOUNTS'); return db.modernAccounts(payload.search || ''); });
