@@ -23,5 +23,5 @@ foreach ($connectionString in $providers) {
   }
 }
 if (-not $created) {
-  throw 'تعذر إنشاء ملف MDB. ثبّت Microsoft Access Database Engine أو Microsoft Access على Windows.'
+  throw 'Unable to create MDB. Install Microsoft Access Database Engine or Microsoft Access on Windows.'
 }

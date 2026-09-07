@@ -140,7 +140,12 @@ async function createMdbIfNeeded() {
   const packagedScript = process.resourcesPath ? path.join(process.resourcesPath, 'create-mdb.ps1') : '';
   const script = packagedScript && fs.existsSync(packagedScript) ? packagedScript : path.join(__dirname, 'create-mdb.ps1');
   const { execFileSync } = require('child_process');
-  execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Path', dbPath], { stdio: 'pipe' });
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Path', dbPath], { stdio: 'pipe' });
+  } catch (error) {
+    const detail = String(error.stderr || error.message || '').replace(/\s+/g, ' ').trim();
+    throw new Error(`تعذر إنشاء قاعدة Access. ثبّت Microsoft Access Database Engine 2016 Runtime (بنفس معمارية التطبيق) ثم أعد المحاولة.${detail ? ` التفاصيل: ${detail.slice(-240)}` : ''}`);
+  }
 }
 
 async function connect() { await createMdbIfNeeded(); return odbc.connect(connectionString()); }
