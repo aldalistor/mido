@@ -7,9 +7,16 @@ function positiveId(value, name) {
 }
 
 function normalizeWorkingDate(value) {
-  const date = value ? new Date(`${String(value).slice(0, 10)}T00:00:00Z`) : new Date();
-  if (Number.isNaN(date.getTime())) throw new Error('تاريخ العمل غير صالح.');
+  const date = value ? parseDate(value, 'تاريخ العمل') : new Date();
   return date.toISOString().slice(0, 10);
+}
+
+function parseDate(value, label) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new Error(`${label} غير صالح.`);
+  const date = new Date(`${raw}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== raw) throw new Error(`${label} غير صالح.`);
+  return date;
 }
 
 function normalizeContext(payload = {}) {
@@ -29,12 +36,26 @@ function hasPermission(permissions, permission) {
 }
 
 function canPostDate(options = {}) {
-  const businessDate = new Date(`${String(options.businessDate).slice(0, 10)}T00:00:00Z`);
-  const postDate = new Date(`${String(options.postDate).slice(0, 10)}T00:00:00Z`);
-  if (Number.isNaN(businessDate.getTime()) || Number.isNaN(postDate.getTime())) return { allowed: false, reason: 'INVALID_DATE' };
+  let businessDate;
+  let postDate;
+  try {
+    businessDate = parseDate(options.businessDate, 'تاريخ العمل');
+    postDate = parseDate(options.postDate, 'تاريخ الترحيل');
+  } catch (error) {
+    return { allowed: false, reason: 'INVALID_DATE' };
+  }
   if (options.periodStatus && String(options.periodStatus).toUpperCase() !== 'OPEN') return { allowed: false, reason: 'PERIOD_CLOSED' };
-  if (options.periodStart && postDate < new Date(`${String(options.periodStart).slice(0, 10)}T00:00:00Z`)) return { allowed: false, reason: 'OUTSIDE_FISCAL_YEAR' };
-  if (options.periodEnd && postDate > new Date(`${String(options.periodEnd).slice(0, 10)}T00:00:00Z`)) return { allowed: false, reason: 'OUTSIDE_FISCAL_YEAR' };
+  let periodStart = null;
+  let periodEnd = null;
+  try {
+    if (options.periodStart) periodStart = parseDate(options.periodStart, 'بداية الفترة');
+    if (options.periodEnd) periodEnd = parseDate(options.periodEnd, 'نهاية الفترة');
+  } catch (error) {
+    return { allowed: false, reason: 'INVALID_PERIOD' };
+  }
+  if (periodStart && periodEnd && periodStart > periodEnd) return { allowed: false, reason: 'INVALID_PERIOD' };
+  if (periodStart && postDate < periodStart) return { allowed: false, reason: 'OUTSIDE_FISCAL_YEAR' };
+  if (periodEnd && postDate > periodEnd) return { allowed: false, reason: 'OUTSIDE_FISCAL_YEAR' };
   if (postDate < businessDate) {
     const days = Math.round((businessDate - postDate) / 86400000);
     if (!options.allowBackdate || !hasPermission(options.permissions, 'BACKDATE_POSTING') || days > Number(options.backdateDaysLimit || 0)) return { allowed: false, reason: 'BACKDATE_NOT_ALLOWED', days };
@@ -59,4 +80,4 @@ function buildAuditEvent({ userId, companyId, branchId, fiscalYearId, actionCode
   };
 }
 
-module.exports = { normalizeContext, hasPermission, canPostDate, buildAuditEvent };
+module.exports = { normalizeContext, hasPermission, canPostDate, buildAuditEvent, parseDate };

@@ -1,0 +1,25 @@
+'use strict';
+const assert = require('node:assert/strict');
+const ops = require('./business-operations-core');
+
+const saleMovement = ops.buildStockMovement({ itemCode: 'I-1', warehouseCode: 'WH-1', movementType: ops.MOVEMENT_TYPES.SALE, quantity: 3, unitCost: 20, availableQuantity: 5 });
+assert.equal(saleMovement.signedQuantity, -3);
+assert.throws(() => ops.buildStockMovement({ itemCode: 'I-1', warehouseCode: 'WH-1', movementType: ops.MOVEMENT_TYPES.SALE, quantity: 6, unitCost: 20, availableQuantity: 5 }), /غير كاف/);
+const transfer = ops.buildStockTransfer({ transferId: 'TR-1', itemCode: 'I-1', fromWarehouseCode: 'WH-1', toWarehouseCode: 'WH-2', quantity: 2, unitCost: 20, availableQuantity: 5 });
+assert.equal(transfer.from.signedQuantity, -2);
+assert.equal(transfer.to.signedQuantity, 2);
+const receipt = ops.buildVoucher({ voucherType: 'RECEIPT', cashAccountCode: '1101', lines: [{ accountCode: '1201', amount: 500 }] });
+assert.equal(receipt.total, 500);
+assert.equal(receipt.journal.totalDebit, receipt.journal.totalCredit);
+const payment = ops.buildVoucher({ voucherType: 'PAYMENT', cashAccountCode: '1101', lines: [{ accountCode: '5201', amount: 125 }] });
+assert.equal(payment.journal.totalDebit, payment.journal.totalCredit);
+const expense = ops.buildExpense({ description: 'إيجار المكتب', amount: 1000, expenseAccountCode: '5201', cashAccountCode: '1101' });
+assert.equal(expense.journal.totalDebit, expense.journal.totalCredit);
+const income = ops.buildIncome({ description: 'إيراد خدمة', amount: 700, incomeAccountCode: '4201', cashAccountCode: '1101' });
+assert.equal(income.journal.totalDebit, income.journal.totalCredit);
+const asset = ops.registerAsset({ assetCode: 'FA-001', name: 'حاسوب', cost: 1200, salvageValue: 0, usefulLifeMonths: 12, assetAccountCode: '1401', cashAccountCode: '1101' });
+const depreciation = ops.calculateDepreciation({ ...asset, accumulatedDepreciation: 0, depreciationExpenseAccountCode: '5203', accumulatedDepreciationAccountCode: '1501' }, 2);
+assert.equal(depreciation.expense, 200);
+assert.equal(depreciation.netBookValue, 1000);
+assert.equal(depreciation.journal.totalDebit, depreciation.journal.totalCredit);
+console.log('business-operations tests passed');

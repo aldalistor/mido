@@ -1,7 +1,7 @@
 const labels = {
   dashboard: 'لوحة التحكم', journal: 'القيود اليومية', accounts: 'دليل الحسابات',
   reports: 'التقارير المالية', revaluation: 'إعادة تقييم العملات', 'year-close': 'إقفال السنة المالية', sales: 'المبيعات', purchases: 'المشتريات',
-  inventory: 'المخزون', contacts: 'العملاء والموردون', security: 'المستخدمون والصلاحيات', database: 'تهيئة قاعدة البيانات'
+  inventory: 'المخزون', cash: 'الصندوق والبنوك', expenses: 'المصروفات والإيرادات', contacts: 'العملاء والموردون', security: 'المستخدمون والصلاحيات', database: 'تهيئة قاعدة البيانات'
 };
 
 const seed = {
@@ -256,7 +256,17 @@ function renderDatabaseWorkspace() {
 }
 
 
+async function renderCashWorkspace() {
+  const render = rows => { $('generic-content').innerHTML = `<div class="module-toolbar accounting-toolbar"><div><p class="eyebrow">الخزينة / السندات</p><h2>الصندوق والبنوك</h2><p class="toolbar-description">إنشاء ومراجعة سندات القبض والصرف مع حفظها في Oracle.</p></div><div class="toolbar-actions"><button class="secondary-button" id="new-payment">＋ سند صرف</button><button class="primary-button" id="new-receipt">＋ سند قبض</button></div></div><div class="panel module-panel"><div class="table-tools"><input id="cash-search" placeholder="ابحث برقم السند أو البيان..." /><span>${rows.length} سند</span></div><div class="table-scroll"><table><thead><tr><th>الرقم</th><th>النوع</th><th>التاريخ</th><th>حساب النقدية</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead><tbody id="cash-body">${renderRows(rows.map(row => [row.VOUCHER_NO || row.voucherNo, row.VOUCHER_TYPE || row.voucherType, row.VOUCHER_DATE || row.voucherDate, row.CASH_ACCOUNT_CODE || row.cashAccountCode, money(row.TOTAL_AMOUNT || row.total), row.STATUS_CODE || row.status, `<button class="text-button cash-void" data-id="${row.VOUCHER_ID || row.voucherId}">إلغاء</button>`]))}</tbody></table></div></div>`; $('new-receipt').onclick = () => openForm('cash-receipt'); $('new-payment').onclick = () => openForm('cash-payment'); $('cash-search').oninput = event => { const q = event.target.value.toLowerCase(); $('cash-body').innerHTML = renderRows(rows.filter(row => JSON.stringify(row).toLowerCase().includes(q)).map(row => [row.VOUCHER_NO, row.VOUCHER_TYPE, row.VOUCHER_DATE, row.CASH_ACCOUNT_CODE, money(row.TOTAL_AMOUNT), row.STATUS_CODE, `<button class="text-button cash-void" data-id="${row.VOUCHER_ID}">إلغاء</button>`])); bindCashVoid(); }; bindCashVoid(); }; const bindCashVoid = () => document.querySelectorAll('.cash-void').forEach(button => { button.onclick = async () => { if (!confirm('هل تريد إلغاء السند؟')) return; try { await window.onyxAPI.voidCashVoucher({ voucherId: button.dataset.id }); showToast('تم إلغاء السند'); renderCashWorkspace(); } catch (error) { showToast(error.message); } }; }); if (dataMode === 'oracle' && window.onyxAPI?.listCashVouchers) { try { render(await window.onyxAPI.listCashVouchers()); } catch (error) { render([]); showToast(error.message); } } else render([]);
+}
+
+async function renderExpensesWorkspace() {
+  const render = rows => { $('generic-content').innerHTML = `<div class="module-toolbar accounting-toolbar"><div><p class="eyebrow">الخزينة / العمليات المالية</p><h2>المصروفات والإيرادات</h2><p class="toolbar-description">تسجيل المصروفات والإيرادات وربطها بحساب النقدية والحساب التصنيفي.</p></div><div class="toolbar-actions"><button class="secondary-button" id="new-income">＋ إيراد</button><button class="primary-button" id="new-expense">＋ مصروف</button></div></div><div class="panel module-panel"><div class="table-tools"><input id="expense-search" placeholder="ابحث برقم العملية أو البيان..." /><span>${rows.length} عملية</span></div><div class="table-scroll"><table><thead><tr><th>الرقم</th><th>النوع</th><th>التاريخ</th><th>البيان</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead><tbody id="expense-body">${renderRows(rows.map(row => [row.OPERATION_NO, row.OPERATION_TYPE, row.OPERATION_DATE, row.DESCRIPTION_AR, money(row.AMOUNT), row.STATUS_CODE, `<button class="text-button expense-void" data-id="${row.OPERATION_ID}">إلغاء</button>`]))}</tbody></table></div></div>`; $('new-expense').onclick = () => openForm('expense'); $('new-income').onclick = () => openForm('income'); document.querySelectorAll('.expense-void').forEach(button => { button.onclick = async () => { if (!confirm('هل تريد إلغاء العملية؟')) return; try { await window.onyxAPI.voidExpenseIncome({ operationId: button.dataset.id }); showToast('تم إلغاء العملية'); renderExpensesWorkspace(); } catch (error) { showToast(error.message); } }; }); }; if (dataMode === 'oracle' && window.onyxAPI?.listExpenseIncome) { try { render(await window.onyxAPI.listExpenseIncome()); } catch (error) { render([]); showToast(error.message); } } else render([]);
+}
+
 function renderModule(view) {
+  if (view === 'cash') return renderCashWorkspace();
+  if (view === 'expenses') return renderExpensesWorkspace();
   if (view === 'accounts') return renderAccountsWorkspace();
   if (view === 'journal') return renderJournalWorkspace();
   if (view === 'purchases') return renderPurchasesWorkspace();
@@ -288,9 +298,15 @@ function renderModule(view) {
 }
 
 function openForm(view) {
-  const titles = { journal: 'قيد يومية جديد', accounts: 'إضافة حساب', sales: 'فاتورة مبيعات جديدة', purchases: 'فاتورة مشتريات جديدة', inventory: 'إضافة صنف جديد', contacts: 'إضافة جهة اتصال' };
+  const titles = { journal: 'قيد يومية جديد', accounts: 'إضافة حساب', sales: 'فاتورة مبيعات جديدة', purchases: 'فاتورة مشتريات جديدة', inventory: 'إضافة صنف جديد', contacts: 'إضافة جهة اتصال', 'cash-receipt': 'سند قبض جديد', 'cash-payment': 'سند صرف جديد', expense: 'مصروف جديد', income: 'إيراد جديد' };
   const form = $('form-modal');
   $('modal-title').textContent = titles[view] || 'سجل جديد';
+  if (['cash-receipt', 'cash-payment', 'expense', 'income'].includes(view)) {
+    const isCash = view.startsWith('cash-');
+    const fields = isCash ? [['cashAccountCode', 'حساب الصندوق أو البنك'], ['accountCode', view === 'cash-receipt' ? 'الحساب المقابل' : 'حساب المصروف أو الجهة'], ['amount', 'المبلغ', 'number'], ['voucherDate', 'التاريخ', 'date'], ['description', 'البيان']] : [['cashAccountCode', 'حساب الصندوق أو البنك'], [view === 'income' ? 'incomeAccountCode' : 'expenseAccountCode', view === 'income' ? 'حساب الإيراد' : 'حساب المصروف'], ['amount', 'المبلغ', 'number'], ['operationDate', 'التاريخ', 'date'], ['description', 'البيان']];
+    $('modal-fields').innerHTML = fields.map(([name, label, type = 'text']) => `<label>${label}<input name="${name}" type="${type}" step="0.01" value="${type === 'date' ? new Date().toISOString().slice(0, 10) : ''}" required /></label>`).join('');
+    form.dataset.view = view; form.classList.add('open'); return;
+  }
   if (view === 'sales' || view === 'purchases') {
     const isSales = view === 'sales';
     const partyLabel = isSales ? 'العميل' : 'المورد';
@@ -417,6 +433,8 @@ $('entry-form').addEventListener('submit', async event => {
       else if (view === 'inventory') await window.onyxAPI.createItem({ code: data.code, name: data.name, unit: data.unit, quantity: data.qty, cost: data.cost, sale: data.sale });
       else if (view === 'contacts') await window.onyxAPI.createContact({ code: data.code, name: data.name, type: data.type.includes('مورد') ? 'VENDOR' : 'CUSTOMER', phone: data.phone, email: data.email });
       else if (view === 'journal') await window.onyxAPI.createJournal({ description: data.description, lines: [{ accountCode: data.debitAccount, debit: Number(data.amount), credit: 0 }, { accountCode: data.creditAccount, debit: 0, credit: Number(data.amount) }] });
+      else if (view === 'cash-receipt' || view === 'cash-payment') await window.onyxAPI.createCashVoucher({ voucherType: view === 'cash-receipt' ? 'RECEIPT' : 'PAYMENT', cashAccountCode: data.cashAccountCode, lines: [{ accountCode: data.accountCode, amount: Number(data.amount), description: data.description }], voucherDate: data.voucherDate, description: data.description });
+      else if (view === 'expense' || view === 'income') await window.onyxAPI.createExpenseIncome({ operationType: view === 'income' ? 'INCOME' : 'EXPENSE', cashAccountCode: data.cashAccountCode, [view === 'income' ? 'incomeAccountCode' : 'expenseAccountCode']: data.incomeAccountCode || data.expenseAccountCode, amount: Number(data.amount), description: data.description, operationDate: data.operationDate });
       else if (view === 'sales' || view === 'purchases') { const invoiceType = view === 'sales' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE'; if (data.documentType && data.documentType !== invoiceType) await window.onyxAPI.createTradeDocument({ documentType: data.documentType, contactCode: data.partyCode || data.party, currencyCode: data.currency || 'SAR', exchangeRate: data.exchangeRate, documentDate: data.invoiceDate, paymentMethod: data.paymentMethod, dueDate: data.dueDate || null, documentNote: data.documentNote || null, lines: data.lines }); else await window.onyxAPI.createInvoice({ type: view === 'sales' ? 'SALE' : 'PURCHASE', contactCode: data.partyCode || data.party, currency: data.currency || 'SAR', exchangeRate: data.exchangeRate, taxAmount: data.taxAmount, invoiceDate: data.invoiceDate, lines: data.lines }); }
     } else {
       await submitLocal(view, data);

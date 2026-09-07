@@ -1,0 +1,20 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { TYPES, PAYMENT_METHODS, calculateInvoice, buildReturn } = require('./commercial-invoice-core');
+
+const sale = calculateInvoice({ type: TYPES.SALE, paymentMethod: PAYMENT_METHODS.PARTIAL, paidAmount: 200, taxRate: 15, currency: 'YER', lines: [{ itemCode: 'ITEM-1', quantity: 2, unitPrice: 100, discountAmount: 10, unitCost: 60 }] });
+assert.equal(sale.subtotal, 190);
+assert.equal(sale.taxableAmount, 190);
+assert.equal(sale.taxAmount, 28.5);
+assert.equal(sale.total, 218.5);
+assert.equal(sale.outstandingAmount, 18.5);
+assert.equal(sale.currency, 'YER');
+const purchase = calculateInvoice({ type: TYPES.PURCHASE, paymentMethod: PAYMENT_METHODS.CASH, lines: [{ itemCode: 'ITEM-2', quantity: 3, unitPrice: 50, unitCost: 50 }] });
+assert.equal(purchase.paidAmount, 150);
+const returned = buildReturn(sale, [{ itemCode: 'ITEM-1', quantity: 1 }]);
+assert.equal(returned.type, TYPES.SALES_RETURN);
+assert.equal(returned.total, 100);
+assert.throws(() => calculateInvoice({ type: TYPES.SALE, paymentMethod: PAYMENT_METHODS.CASH, lines: [{ itemCode: 'ITEM-1', quantity: 1, unitPrice: 100 }], paidAmount: 20 }), /نقدية/);
+assert.throws(() => calculateInvoice({ type: TYPES.SALE, paymentMethod: PAYMENT_METHODS.CREDIT, paidAmount: 10, lines: [{ itemCode: 'ITEM-1', quantity: 1, unitPrice: 100 }] }), /جزئي/);
+assert.throws(() => buildReturn(sale, [{ itemCode: 'ITEM-1', quantity: 3 }]), /تتجاوز/);
+console.log('commercial-invoice tests passed');
