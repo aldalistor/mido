@@ -48,6 +48,12 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:customers', (_event, payload = {}) => { requirePermission('VIEW_CONTACTS'); return db.customers(payload.search || ''); });
   ipcMain.handle('db:journal', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.journal(payload.limit || 50); });
   ipcMain.handle('reports:financial', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.financialReports(payload); });
+  ipcMain.handle('reports:trial-balance', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.trialBalanceReport({ ...payload, context: currentSession.context || {} }); });
+  ipcMain.handle('reports:general-ledger', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.generalLedgerReport({ ...payload, context: currentSession.context || {} }); });
+  ipcMain.handle('reports:income-statement', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.incomeStatementReport({ ...payload, context: currentSession.context || {} }); });
+  ipcMain.handle('reports:balance-sheet', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.balanceSheetReport({ ...payload, context: currentSession.context || {} }); });
+  ipcMain.handle('reports:sales-purchase', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.salesPurchaseReport({ ...payload, context: currentSession.context || {} }); });
+  ipcMain.handle('reports:inventory-valuation', (_event, payload = {}) => { requirePermission('VIEW_REPORTS'); return db.inventoryValuationReport({ ...payload, context: currentSession.context || {} }); });
   ipcMain.handle('db:create-journal', async (_event, payload = {}) => { requirePermission('POST_JOURNALS'); const result = await db.createModernJournal({ ...payload, userId: currentSession.userId }); await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'CREATE_JOURNAL', entityType: 'JOURNAL_ENTRY', entityId: result.entryId, afterValue: result }); return result; });
   ipcMain.handle('auth:current', () => currentSession);
   ipcMain.handle('auth:contexts', () => { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); return db.listSessionContexts(currentSession.userId); });
