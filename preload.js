@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   createInvoice: (payload) => ipcRenderer.invoke('db:create-invoice', payload),
   customers: (search = '') => ipcRenderer.invoke('db:customers', { search }),
   journal: (limit = 50) => ipcRenderer.invoke('db:journal', { limit }),
+  financialReports: (payload = {}) => ipcRenderer.invoke('reports:financial', payload),
+  auditEvents: (payload = {}) => ipcRenderer.invoke('admin:list-audit', payload),
   createJournal: (payload) => ipcRenderer.invoke('db:create-journal', payload),
   currentSession: () => ipcRenderer.invoke('auth:current'),
   sessionContexts: () => ipcRenderer.invoke('auth:contexts'),
