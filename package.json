@@ -40,6 +40,8 @@
     }
   },
   "dependencies": {
+    "mssql": "^12.7.0",
+    "odbc": "^2.5.0",
     "oracledb": "^6.10.0"
   }
 }
