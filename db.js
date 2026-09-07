@@ -77,3 +77,73 @@ async function recordAudit(payload = {}) { return withConnection(async connectio
 async function listAudit(payload = {}) { const { startDate, endDate } = dateRange(payload); const limit = Math.min(Math.max(Number(payload.limit) || 100, 1), 500); return (await query(`select * from (select a.audit_id,a.user_id,u.username,u.display_name_ar,a.company_id,a.branch_id,a.fiscal_year_id,a.action_code,a.entity_type,a.entity_id,a.before_value before_json,a.after_value after_json,a.reason,a.terminal_name,a.created_at from onyx_audit_log a left join onyx_user u on u.user_id=a.user_id where (:company_id is null or a.company_id=:company_id) and (:branch_id is null or a.branch_id=:branch_id) and (:entity_type is null or a.entity_type=:entity_type) and a.created_at >= to_date(:start_date,'YYYY-MM-DD') and a.created_at < to_date(:end_date,'YYYY-MM-DD') + 1 order by a.created_at desc) where rownum <= :limit`, { company_id: payload.companyId || null, branch_id: payload.branchId || null, entity_type: payload.entityType || null, start_date: startDate, end_date: endDate, limit })).rows; }
 async function close() { if (pool) { await pool.close(10); pool = undefined; } }
 module.exports = { test, dashboard, accounts, customers, journal, financialReports, modernAccounts, createModernAccount, createModernJournal, modernContacts, modernItems, createModernContact, createModernItem, createModernInvoice, createTradeDocument, listTradeDocuments, transitionTradeDocument, authenticate, createUser, listUsers, listRoles, assignRole, listSessionContexts, setSessionContext, recordAudit, listAudit, close };
+
+
+async function createInvoiceDraft(payload = {}) {
+  const type = payload.type === 'PURCHASE' ? 'PURCHASE' : 'SALE';
+  const posting = require('./invoice-posting-core').buildInvoicePosting({ ...payload, type, paymentStatus: payload.paymentStatus || 'UNPAID' });
+  return withConnection(async connection => {
+    const ctx = await modernContext(connection);
+    const contact = payload.contactCode ? await connection.execute('select contact_id from ONYX_CONTACT where company_id=:company_id and code=:code and contact_type=:type', { company_id: ctx.COMPANY_ID, code: String(payload.contactCode).trim(), type: type === 'SALE' ? 'CUSTOMER' : 'VENDOR' }, { outFormat: oracledb.OUT_FORMAT_OBJECT }) : { rows: [] };
+    if (payload.contactCode && !contact.rows[0]) throw new Error('الجهة غير موجودة أو نوعها غير مطابق.');
+    const invoiceNo = `${type === 'SALE' ? 'INV' : 'PUR'}-${Date.now()}`;
+    const inserted = await connection.execute(`insert into ONYX_INVOICE(company_id,branch_id,invoice_type,invoice_no,contact_id,invoice_date,subtotal,tax_amount,total_amount,status_code,currency_code,exchange_rate,base_subtotal,base_total_amount,payment_method,payment_status,due_date,paid_amount,approval_status) values (:company_id,:branch_id,:type,:invoice_no,:contact_id,to_date(:invoice_date,'YYYY-MM-DD'),:subtotal,:tax,:total,'DRAFT',:currency,:rate,:base_subtotal,:base_total,'CREDIT','UNPAID',to_date(:due_date,'YYYY-MM-DD'),0,'PENDING') returning invoice_id into :invoice_id`, { company_id: ctx.COMPANY_ID, branch_id: ctx.BRANCH_ID, type, invoice_no, contact_id: contact.rows[0]?.CONTACT_ID || null, invoice_date: posting.invoiceDate || new Date().toISOString().slice(0, 10), subtotal: posting.subtotal, tax: posting.tax, total: posting.total, currency: posting.currency, rate: posting.exchangeRate, base_subtotal: posting.subtotal * posting.exchangeRate, base_total: posting.total * posting.exchangeRate, due_date: posting.payment.dueDate, invoice_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
+    const invoiceId = inserted.outBinds.invoice_id[0];
+    for (const line of posting.lines) {
+      const item = await connection.execute('select item_id from ONYX_ITEM where company_id=:company_id and item_code=:code', { company_id: ctx.COMPANY_ID, code: line.itemCode }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+      if (!item.rows[0]) throw new Error(`الصنف غير موجود: ${line.itemCode}`);
+      await connection.execute('insert into ONYX_INVOICE_LINE(invoice_id,item_id,quantity,unit_price,unit_cost,discount_amount,line_total,base_line_total) values (:invoice_id,:item_id,:quantity,:unit_price,:unit_cost,:discount,:line_total,:base_line_total)', { invoice_id: invoiceId, item_id: item.rows[0].ITEM_ID, quantity: line.quantity, unit_price: line.unitPrice, unit_cost: line.unitCost, discount: line.discountAmount, line_total: line.lineTotal + line.taxAmount, base_line_total: (line.lineTotal + line.taxAmount) * posting.exchangeRate });
+    }
+    await connection.commit();
+    return { invoiceId, invoiceNo, type, total: posting.total, status: 'PENDING_APPROVAL', approvalStatus: 'PENDING' };
+  });
+}
+
+async function approveModernInvoice(payload = {}) {
+  const invoiceId = Number(payload.invoiceId);
+  if (!Number.isInteger(invoiceId) || invoiceId <= 0) throw new Error('معرف الفاتورة غير صالح.');
+  return withConnection(async connection => {
+    const invoiceResult = await connection.execute(`select invoice_id,company_id,branch_id,invoice_type,invoice_no,invoice_date,subtotal,tax_amount,total_amount,currency_code,exchange_rate from onyx_invoice where invoice_id=:invoice_id and status_code='DRAFT' and approval_status='PENDING' for update`, { invoice_id: invoiceId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    const invoice = invoiceResult.rows[0];
+    if (!invoice) throw new Error('الفاتورة غير موجودة أو ليست بانتظار الاعتماد.');
+    const linesResult = await connection.execute(`select l.quantity,l.unit_price,l.unit_cost,l.discount_amount,l.line_total,i.item_code from onyx_invoice_line l join onyx_item i on i.item_id=l.item_id where l.invoice_id=:invoice_id`, { invoice_id: invoiceId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    const posting = require('./invoice-posting-core').buildInvoicePosting({ type: invoice.INVOICE_TYPE, invoiceDate: invoice.INVOICE_DATE.toISOString().slice(0, 10), currency: invoice.CURRENCY_CODE, exchangeRate: invoice.EXCHANGE_RATE, taxAmount: invoice.TAX_AMOUNT, paymentStatus: 'UNPAID', lines: linesResult.rows.map(line => ({ itemCode: line.ITEM_CODE, quantity: line.QUANTITY, unitPrice: line.UNIT_PRICE, unitCost: line.UNIT_COST, discountAmount: line.DISCOUNT_AMOUNT })) });
+    const entry = await connection.execute('insert into ONYX_JOURNAL_ENTRY(company_id,branch_id,fiscal_year_id,entry_no,entry_date,description_ar,status_code,source_code,currency_code,exchange_rate) values (:company_id,:branch_id,(select fiscal_year_id from ONYX_FISCAL_YEAR where company_id=:company_id and status_code=\'OPEN\' fetch first 1 row only),:entry_no,trunc(sysdate),:description,\'DRAFT\',:source,:currency,:rate) returning entry_id into :entry_id', { company_id: invoice.COMPANY_ID, entry_no: `JV-${Date.now()}`, description: posting.journal.description, source: posting.journal.source, currency: invoice.CURRENCY_CODE, rate: invoice.EXCHANGE_RATE, entry_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
+    const entryId = entry.outBinds.entry_id[0];
+    for (const line of posting.journal.lines) { const account = await connection.execute('select account_id from ONYX_ACCOUNT where company_id=:company_id and account_code=:code', { company_id: invoice.COMPANY_ID, code: line.accountCode }, { outFormat: oracledb.OUT_FORMAT_OBJECT }); if (!account.rows[0]) throw new Error(`الحساب غير موجود: ${line.accountCode}`); await connection.execute('insert into ONYX_JOURNAL_LINE(entry_id,account_id,line_description_ar,debit,credit) values (:entry_id,:account_id,:description,:debit,:credit)', { entry_id: entryId, account_id: account.rows[0].ACCOUNT_ID, description: line.description, debit: line.debit * invoice.EXCHANGE_RATE, credit: line.credit * invoice.EXCHANGE_RATE }); }
+    const warehouse = await connection.execute('select warehouse_id from ONYX_WAREHOUSE where company_id=:company_id and branch_id=:branch_id and active_flag=1 fetch first 1 row only', { company_id: invoice.COMPANY_ID, branch_id: invoice.BRANCH_ID }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    if (!warehouse.rows[0]) throw new Error('لا يوجد مستودع نشط للفرع الحالي.');
+    for (const movement of posting.stockMovements) { const item = await connection.execute('select item_id from ONYX_ITEM where company_id=:company_id and item_code=:code', { company_id: invoice.COMPANY_ID, code: movement.itemCode }, { outFormat: oracledb.OUT_FORMAT_OBJECT }); const updated = await connection.execute('update ONYX_ITEM set quantity=quantity+:delta where item_id=:item_id and quantity+:delta >= 0', { delta: movement.quantity, item_id: item.rows[0].ITEM_ID }); if (updated.rowsAffected !== 1) throw new Error(`الرصيد المخزني غير كاف للصنف: ${movement.itemCode}`); await connection.execute('insert into ONYX_STOCK_MOVEMENT(company_id,branch_id,warehouse_id,item_id,invoice_id,movement_type,quantity,unit_cost,created_by) values (:company_id,:branch_id,:warehouse_id,:item_id,:invoice_id,:movement_type,:quantity,:unit_cost,:created_by)', { company_id: invoice.COMPANY_ID, branch_id: invoice.BRANCH_ID, warehouse_id: warehouse.rows[0].WAREHOUSE_ID, item_id: item.rows[0].ITEM_ID, invoice_id: invoiceId, movement_type: movement.movementType, quantity: movement.quantity, unit_cost: movement.unitCost, created_by: payload.userId || null }); }
+    await connection.execute('update ONYX_JOURNAL_ENTRY set status_code=\'POSTED\',posted_by=:user_id where entry_id=:entry_id', { user_id: payload.userId, entry_id: entryId });
+    await connection.execute('update ONYX_INVOICE set journal_entry_id=:entry_id,status_code=\'POSTED\',approval_status=\'APPROVED\',approved_by=:user_id,approved_at=systimestamp,posted_by=:user_id,posted_at=systimestamp where invoice_id=:invoice_id', { entry_id: entryId, user_id: payload.userId, invoice_id: invoiceId });
+    await connection.commit();
+    return { invoiceId, entryId, status: 'POSTED', approvalStatus: 'APPROVED', total: posting.total };
+  });
+}
+
+async function recordInvoicePayment(payload = {}) {
+  const invoiceId = Number(payload.invoiceId); const amount = Number(payload.amount);
+  if (!Number.isInteger(invoiceId) || invoiceId <= 0 || !Number.isFinite(amount) || amount <= 0) throw new Error('بيانات الدفعة غير صالحة.');
+  return withConnection(async connection => {
+    const result = await connection.execute('select invoice_id,company_id,branch_id,total_amount from ONYX_INVOICE where invoice_id=:invoice_id and status_code=\'POSTED\' for update', { invoice_id: invoiceId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    const invoice = result.rows[0]; if (!invoice) throw new Error('الفاتورة غير موجودة أو غير مرحّلة.');
+    const paid = await connection.execute('select nvl(sum(amount),0) paid from ONYX_INVOICE_PAYMENT where invoice_id=:invoice_id', { invoice_id: invoiceId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    if (Number(paid.rows[0].PAID) + amount > Number(invoice.TOTAL_AMOUNT) + 0.0005) throw new Error('مجموع الدفعات يتجاوز إجمالي الفاتورة.');
+    const inserted = await connection.execute('insert into ONYX_INVOICE_PAYMENT(invoice_id,company_id,branch_id,amount,payment_method,reference_no,created_by) values (:invoice_id,:company_id,:branch_id,:amount,:method,:reference,:user_id) returning payment_id into :payment_id', { invoice_id: invoiceId, company_id: invoice.COMPANY_ID, branch_id: invoice.BRANCH_ID, amount, method: String(payload.paymentMethod || 'CASH').toUpperCase(), reference: payload.reference || null, user_id: payload.userId || null, payment_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
+    const newPaid = Number(paid.rows[0].PAID) + amount; const status = newPaid >= Number(invoice.TOTAL_AMOUNT) - 0.0005 ? 'PAID' : 'PARTIAL';
+    await connection.execute('update ONYX_INVOICE set paid_amount=:paid,payment_status=:status where invoice_id=:invoice_id', { paid: newPaid, status, invoice_id: invoiceId }); await connection.commit();
+    return { paymentId: inserted.outBinds.payment_id[0], invoiceId, paidAmount: newPaid, balanceDue: Number(invoice.TOTAL_AMOUNT) - newPaid, paymentStatus: status };
+  });
+}
+
+async function createInvoiceReturn(payload = {}) {
+  const sourceId = Number(payload.invoiceId); if (!Number.isInteger(sourceId) || sourceId <= 0) throw new Error('معرف الفاتورة الأصلية غير صالح.');
+  return withConnection(async connection => {
+    const source = await connection.execute('select invoice_id,company_id,branch_id,invoice_type,currency_code,exchange_rate,total_amount from ONYX_INVOICE where invoice_id=:invoice_id and status_code=\'POSTED\'', { invoice_id: sourceId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }); if (!source.rows[0]) throw new Error('الفاتورة الأصلية غير موجودة أو غير مرحّلة.');
+    const lines = Array.isArray(payload.lines) ? payload.lines : []; if (!lines.length) throw new Error('المرتجع يحتاج إلى بند واحد على الأقل.');
+    const inserted = await connection.execute(`insert into ONYX_INVOICE(company_id,branch_id,invoice_type,invoice_no,invoice_date,subtotal,tax_amount,total_amount,status_code,currency_code,exchange_rate,base_subtotal,base_total_amount,payment_method,payment_status,paid_amount,approval_status,return_of_invoice_id) values (:company_id,:branch_id,:type,:invoice_no,trunc(sysdate),:subtotal,0,:total,'DRAFT',:currency,:rate,:base_subtotal,:total,'CREDIT','UNPAID',0,'PENDING',:source_id) returning invoice_id into :invoice_id`, { company_id: source.rows[0].COMPANY_ID, branch_id: source.rows[0].BRANCH_ID, type: source.rows[0].INVOICE_TYPE, invoice_no: `RET-${Date.now()}`, subtotal: Number(payload.total || 0), total: Number(payload.total || 0), currency: source.rows[0].CURRENCY_CODE, rate: source.rows[0].EXCHANGE_RATE, base_subtotal: Number(payload.total || 0) * source.rows[0].EXCHANGE_RATE, source_id: sourceId, invoice_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
+    const returnId = inserted.outBinds.invoice_id[0]; await connection.execute('insert into ONYX_INVOICE_RETURN(invoice_id,return_invoice_id,company_id,reason,created_by) values (:invoice_id,:return_id,:company_id,:reason,:user_id)', { invoice_id: sourceId, return_id: returnId, company_id: source.rows[0].COMPANY_ID, reason: payload.reason || null, user_id: payload.userId || null }); await connection.commit(); return { returnInvoiceId: returnId, sourceInvoiceId: sourceId, status: 'PENDING_APPROVAL' };
+  });
+}
+
+Object.assign(module.exports, { createInvoiceDraft, approveModernInvoice, recordInvoicePayment, createInvoiceReturn });
