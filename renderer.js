@@ -527,7 +527,7 @@ async function refreshDbStatus() {
   status.classList.add('checking'); status.innerHTML = '<i></i> جارٍ الاتصال';
   try {
     const info = await window.onyxAPI.dbTest();
-    dataMode = 'oracle'; status.classList.remove('checking', 'demo'); status.classList.add('connected'); status.innerHTML = `<i></i> ${info.engine === 'access' ? 'Access MDB' : 'Oracle'}: ${esc(info.DB_USER || info.DB_PATH || '')}`;
+    dataMode = 'oracle'; status.classList.remove('checking', 'demo'); status.classList.add('connected'); const engineLabel = info.engine === 'access' ? 'Access MDB' : info.engine === 'sqlite' ? 'SQLite' : 'Oracle'; status.innerHTML = `<i></i> ${engineLabel}: ${esc(info.DB_USER || info.DB_PATH || '')}`;
     return true;
   } catch (error) { setDemoMode(); console.warn('Oracle connection unavailable:', error.message); return false; }
 }

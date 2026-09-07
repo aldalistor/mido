@@ -4,11 +4,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const odbc = require('odbc');
+let odbc = null;
+try { odbc = require('odbc'); } catch (_) { odbc = null; }
 
 const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-const dbPath = path.resolve(process.env.ONYX_DB_PATH || path.join(appData, 'Onyx Accounting', 'onyx-local.mdb'));
-const connectionString = () => `Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=${dbPath};`;
+const configuredPath = process.env.ONYX_DB_PATH || path.join(appData, 'Onyx Accounting', 'onyx-local.mdb');
+const accessPath = path.resolve(configuredPath);
+const sqlitePath = path.resolve(process.env.ONYX_SQLITE_PATH || configuredPath.replace(/\.(mdb|accdb)$/i, '.sqlite'));
+let backend = odbc ? 'access' : 'sqlite';
+const currentDbPath = () => backend === 'sqlite' ? sqlitePath : accessPath;
+const connectionString = () => `Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=${accessPath};`;
 let initialized = false;
 let initializationOptions = {};
 const schema = [
@@ -133,28 +138,42 @@ function currentContext() { return { companyId: 1, branchId: 1, fiscalYearId: 1 
 function hashPassword(password) { const salt = crypto.randomBytes(16).toString('base64url'); const iterations = 210000; const hash = crypto.pbkdf2Sync(String(password), salt, iterations, 32, 'sha256').toString('base64url'); return `pbkdf2$${iterations}$${salt}$${hash}`; }
 function verifyPassword(password, stored) { const [algorithm, iterations, salt, expected] = String(stored || '').split('$'); if (algorithm !== 'pbkdf2') return false; const actual = crypto.pbkdf2Sync(String(password), salt, Number(iterations), 32, 'sha256').toString('base64url'); return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected)); }
 
+function sqliteSchema() { return schema.map(statement => statement.replace(/COUNTER\s+PRIMARY KEY/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT').replace(/TEXT\(\d+\)/gi, 'TEXT').replace(/\bLONG\b/gi, 'INTEGER').replace(/\bBIT\b/gi, 'INTEGER').replace(/\bDATETIME\b/gi, 'TEXT').replace(/\bDOUBLE\b/gi, 'REAL').replace(/\bMEMO\b/gi, 'TEXT')); }
+function sqliteConnection() {
+  const { DatabaseSync } = require('node:sqlite');
+  fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
+  const database = new DatabaseSync(sqlitePath);
+  return {
+    async query(sql, params = []) { const statement = database.prepare(sql); const values = params.map(value => value instanceof Date ? value.toISOString() : value); return /^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql) ? statement.all(...values) : (statement.run(...values), []); },
+    async beginTransaction() { database.exec('BEGIN'); },
+    async commit() { database.exec('COMMIT'); },
+    async rollback() { database.exec('ROLLBACK'); },
+    async close() { database.close(); }
+  };
+}
+
 async function createMdbIfNeeded() {
-  if (fs.existsSync(dbPath)) return;
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  if (process.platform !== 'win32') throw new Error(`ملف MDB غير موجود. سيُنشأ تلقائيًا على Windows، والمسار المتوقع: ${dbPath}`);
+  if (backend === 'sqlite' || fs.existsSync(accessPath)) return;
+  fs.mkdirSync(path.dirname(accessPath), { recursive: true });
+  if (process.platform !== 'win32') throw new Error(`ملف Access غير موجود. سيُنشأ تلقائيًا على Windows، والمسار المتوقع: ${accessPath}`);
   const packagedScript = process.resourcesPath ? path.join(process.resourcesPath, 'create-mdb.ps1') : '';
   const script = packagedScript && fs.existsSync(packagedScript) ? packagedScript : path.join(__dirname, 'create-mdb.ps1');
   const { execFileSync } = require('child_process');
   try {
-    execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Path', dbPath], { stdio: 'pipe' });
+    execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Path', accessPath], { stdio: 'pipe' });
   } catch (error) {
     const detail = String(error.stderr || error.message || '').replace(/\s+/g, ' ').trim();
     throw new Error(`تعذر إنشاء قاعدة Access. ثبّت Microsoft Access Database Engine 2016 Runtime (بنفس معمارية التطبيق) ثم أعد المحاولة.${detail ? ` التفاصيل: ${detail.slice(-240)}` : ''}`);
   }
 }
 
-async function connect() { await createMdbIfNeeded(); return odbc.connect(connectionString()); }
+async function connect() { if (backend === 'sqlite') return sqliteConnection(); await createMdbIfNeeded(); return odbc.connect(connectionString()); }
 async function query(sql, params = []) { const connection = await connect(); try { return await connection.query(sql, params); } finally { await connection.close(); } }
 async function setup() {
   if (initialized) return;
   const connection = await connect();
   try {
-    for (const statement of schema) { try { await connection.query(statement); } catch (error) { if (!/already exists|exists|duplicate/i.test(error.message)) throw error; } }
+    for (const statement of backend === 'sqlite' ? sqliteSchema() : schema) { try { await connection.query(statement); } catch (error) { if (!/already exists|exists|duplicate/i.test(error.message)) throw error; } }
     const company = rows(await connection.query('SELECT COMPANY_ID FROM ONYX_COMPANY WHERE COMPANY_ID=1'));
     if (!company.length) {
       const options = initializationOptions;
@@ -175,7 +194,7 @@ async function setup() {
     }
     for (const account of chartOfAccounts) {
       const existing = rows(await connection.query('SELECT ACCOUNT_ID FROM ONYX_ACCOUNT WHERE COMPANY_ID=1 AND ACCOUNT_CODE=?', [account[0]]));
-      if (!existing.length) await connection.query('INSERT INTO ONYX_ACCOUNT (COMPANY_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG) VALUES (1,?,?,?,?,1)', account);
+      if (!existing.length) await connection.query('INSERT INTO ONYX_ACCOUNT (COMPANY_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG) VALUES (1,?,?,?,?,1)', [...account, 0]);
     }
     if (initializationOptions.includeDemoData) await seedDemoData(connection);
     initialized = true;
@@ -184,9 +203,9 @@ async function setup() {
 async function withTransaction(work) { await setup(); const connection = await connect(); try { await connection.beginTransaction(); const result = await work(connection); await connection.commit(); return result; } catch (error) { try { await connection.rollback(); } catch (_) {} throw error; } finally { await connection.close(); } }
 async function nextId(connection, table, field) { const result = rows(await connection.query(`SELECT MAX(${field}) AS LAST_ID FROM ${table}`)); return Number(val(result[0], 'LAST_ID', 0) || 0) + 1; }
 
-async function initialize(options = {}) { initializationOptions = { ...options }; await setup(); initializationOptions = {}; return { engine: 'access', initialized: true, version: 'mdb-003-production-bootstrap', path: dbPath, tables: schema.length, demoData: options.includeDemoData ? { seedCode: 'DEMO-2026-001', contacts: 3, items: 4, invoices: 3, journalEntries: 1 } : null }; }
-async function test() { await setup(); return { DB_USER: 'LOCAL', SERVICE_NAME: path.basename(dbPath), ENGINE: 'ACCESS_MDB', DB_PATH: dbPath, engine: 'access' }; }
-async function bootstrapStatus() { return { initialized: fs.existsSync(dbPath), path: dbPath, platform: process.platform }; }
+async function initialize(options = {}) { initializationOptions = { ...options }; if (options.engine === 'sqlite' || !odbc) backend = 'sqlite'; await setup(); initializationOptions = {}; return { engine: backend, initialized: true, version: backend === 'sqlite' ? 'sqlite-001-production-bootstrap' : 'mdb-003-production-bootstrap', path: currentDbPath(), tables: schema.length, demoData: options.includeDemoData ? { seedCode: 'DEMO-2026-001', contacts: 3, items: 4, invoices: 3, journalEntries: 1 } : null }; }
+async function test() { await setup(); return { DB_USER: 'LOCAL', SERVICE_NAME: path.basename(currentDbPath()), ENGINE: backend === 'sqlite' ? 'SQLITE' : 'ACCESS_MDB', DB_PATH: currentDbPath(), engine: backend }; }
+async function bootstrapStatus() { return { initialized: fs.existsSync(currentDbPath()), path: currentDbPath(), platform: process.platform, engine: backend, accessAvailable: Boolean(odbc) }; }
 async function dashboard() { await setup(); const [a,c,j] = await Promise.all([query('SELECT COUNT(*) AS N FROM ONYX_ACCOUNT'), query('SELECT COUNT(*) AS N FROM ONYX_CONTACT'), query("SELECT COUNT(*) AS N FROM ONYX_JOURNAL_ENTRY WHERE STATUS_CODE='POSTED'")]); return { mode: 'access', accounts: Number(val(a[0],'N',0)), customers: Number(val(c[0],'N',0)), journals: Number(val(j[0],'N',0)) }; }
 async function modernAccounts(search = '') { await setup(); const q = `%${String(search).toUpperCase()}%`; const result = await query('SELECT ACCOUNT_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG FROM ONYX_ACCOUNT WHERE COMPANY_ID=1 AND (UCASE(ACCOUNT_CODE) LIKE ? OR UCASE(ACCOUNT_NAME_AR) LIKE ?) ORDER BY ACCOUNT_CODE', [q,q]); return rows(result); }
 async function accounts(search='') { return modernAccounts(search); }
@@ -216,7 +235,7 @@ async function inventoryValuationReport(p={}){const items=await modernItems('');
 
 async function organizationSettings(){await setup();const company=rows(await query('SELECT COMPANY_ID,COMPANY_CODE,COMPANY_NAME_AR,BASE_CURRENCY FROM ONYX_COMPANY WHERE COMPANY_ID=1'))[0];const branch=rows(await query('SELECT BRANCH_ID,BRANCH_CODE,BRANCH_NAME_AR FROM ONYX_BRANCH WHERE BRANCH_ID=1'))[0];const fiscalYear=rows(await query('SELECT FISCAL_YEAR_ID,FISCAL_YEAR,START_DATE,END_DATE,STATUS_CODE FROM ONYX_FISCAL_YEAR WHERE FISCAL_YEAR_ID=1'))[0];return {company,branch,fiscalYear};}
 async function updateOrganizationSettings(p={}){return withTransaction(async c=>{const companyName=String(p.companyName||'').trim();const companyCode=String(p.companyCode||'').trim().toUpperCase();const branchName=String(p.branchName||'').trim();const branchCode=String(p.branchCode||'').trim().toUpperCase();const fiscalYear=Number(p.fiscalYear);if(!companyName||!companyCode||!branchName||!branchCode||!Number.isInteger(fiscalYear)||fiscalYear<2000||fiscalYear>2200)throw new Error('بيانات الشركة والفرع والسنة المالية غير صالحة.');await c.query('UPDATE ONYX_COMPANY SET COMPANY_CODE=?,COMPANY_NAME_AR=?,BASE_CURRENCY=? WHERE COMPANY_ID=1',[companyCode,companyName,p.currency||'SAR']);await c.query('UPDATE ONYX_BRANCH SET BRANCH_CODE=?,BRANCH_NAME_AR=? WHERE BRANCH_ID=1',[branchCode,branchName]);await c.query('UPDATE ONYX_FISCAL_YEAR SET FISCAL_YEAR=?,START_DATE=?,END_DATE=? WHERE FISCAL_YEAR_ID=1',[fiscalYear,dateValue(`${fiscalYear}-01-01`),dateValue(`${fiscalYear}-12-31`)]);await c.query('UPDATE ONYX_WAREHOUSE SET WAREHOUSE_CODE=?,WAREHOUSE_NAME_AR=? WHERE WAREHOUSE_ID=1',[branchCode,branchName]);return {companyName,companyCode,branchName,branchCode,fiscalYear};});}
-async function authenticate(username,password){await setup();const result=rows(await query('SELECT * FROM ONYX_USER WHERE UCASE(USERNAME)=?',[String(username||'').toUpperCase()]));const user=result[0];if(!user||!verifyPassword(password,val(user,'PASSWORD_HASH')))throw new Error('بيانات الدخول غير صحيحة.');const settings=await organizationSettings();return {userId:Number(val(user,'USER_ID')),username:val(user,'USERNAME'),displayNameAr:val(user,'DISPLAY_NAME_AR'),languageCode:'ar',permissions:['ALL'],roles:[{ROLE_NAME_AR:'مدير النظام'}],context:{companyId:1,branchId:1,fiscalYearId:1},company:{COMPANY_NAME_AR:val(settings.company,'COMPANY_NAME_AR'),BRANCH_NAME_AR:val(settings.branch,'BRANCH_NAME_AR'),FISCAL_YEAR:Number(val(settings.fiscalYear,'FISCAL_YEAR'))}};}
+async function authenticate(username,password){await setup();const result=rows(await query('SELECT * FROM ONYX_USER WHERE UPPER(USERNAME)=?',[String(username||'').toUpperCase()]));const user=result[0];if(!user||!verifyPassword(password,val(user,'PASSWORD_HASH')))throw new Error('بيانات الدخول غير صحيحة.');const settings=await organizationSettings();return {userId:Number(val(user,'USER_ID')),username:val(user,'USERNAME'),displayNameAr:val(user,'DISPLAY_NAME_AR'),languageCode:'ar',permissions:['ALL'],roles:[{ROLE_NAME_AR:'مدير النظام'}],context:{companyId:1,branchId:1,fiscalYearId:1},company:{COMPANY_NAME_AR:val(settings.company,'COMPANY_NAME_AR'),BRANCH_NAME_AR:val(settings.branch,'BRANCH_NAME_AR'),FISCAL_YEAR:Number(val(settings.fiscalYear,'FISCAL_YEAR'))}};}
 async function listUsers(){await setup();return rows(await query('SELECT USER_ID,USERNAME,DISPLAY_NAME_AR,LANGUAGE_CODE,ACTIVE_FLAG FROM ONYX_USER'));}
 async function createUser(p={}){return withTransaction(async c=>{const id=await nextId(c,'ONYX_USER','USER_ID');await c.query('INSERT INTO ONYX_USER (USER_ID,USERNAME,DISPLAY_NAME_AR,PASSWORD_HASH,LANGUAGE_CODE,ACTIVE_FLAG,FAILED_ATTEMPTS) VALUES (?,?,?,?,\'ar\',1,0)',[id,String(p.username).toUpperCase(),p.displayNameAr,hashPassword(p.password)]);return {userId:id,username:p.username,displayNameAr:p.displayNameAr};});}
 async function listRoles(){await setup();return rows(await query('SELECT * FROM ONYX_ROLE'));}
