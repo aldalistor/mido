@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('onyxAPI', {
   setupTestConnection: (payload) => ipcRenderer.invoke('db:setup-test', payload),
+  setupInspectSchema: (payload) => ipcRenderer.invoke('db:setup-inspect', payload),
   setupInitializeSchema: (payload) => ipcRenderer.invoke('db:setup-initialize', payload),
   dbTest: () => ipcRenderer.invoke('db:test'),
   dashboard: () => ipcRenderer.invoke('db:dashboard'),

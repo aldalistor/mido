@@ -28,6 +28,8 @@ function normalize(config = {}) {
 }
 
 function oracleConnectString(config) { return config.connectString || `${config.host}:${config.port}/${config.service}`; }
+const requiredOracleTables = ['ONYX_USER','ONYX_COMPANY','ONYX_BRANCH','ONYX_FISCAL_YEAR','ONYX_ACCOUNT','ONYX_CONTACT','ONYX_ITEM','ONYX_INVOICE','ONYX_INVOICE_LINE','ONYX_WAREHOUSE','ONYX_STOCK_MOVEMENT','ONYX_AUDIT_LOG','ONYX_TRADE_DOCUMENT','ONYX_TRADE_DOCUMENT_LINE','ONYX_DOCUMENT_LINK'];
+async function inspectOracleSchema(input = {}) { const config = normalize({ ...input, engine: 'oracle' }); const connection = await oracleConnection(config); try { const info = await connection.execute(`select user as DB_USER, sys_context('USERENV','SERVICE_NAME') as SERVICE_NAME from dual`, {}, { outFormat: 4002 }); const tables = await connection.execute(`select table_name from user_tables where table_name in (${requiredOracleTables.map((_, index) => `:table_${index}`).join(',')})`, Object.fromEntries(requiredOracleTables.map((table, index) => [`table_${index}`, table])), { outFormat: 4002 }); const existing = tables.rows.map(row => row.TABLE_NAME); const missing = requiredOracleTables.filter(table => !existing.includes(table)); return { engine: 'oracle', connected: true, ...info.rows[0], requiredTables: requiredOracleTables, existingTables: existing, missingTables: missing, schemaReady: missing.length === 0, recommendedAction: missing.length ? 'تشغيل الترحيلات الناقصة بحساب يملك صلاحيات DDL.' : 'المخطط جاهز للاتصال.' }; } finally { await connection.close(); } }
 
 async function oracleConnection(config) {
   let oracledb;
@@ -125,4 +127,4 @@ async function initializePortable(config) {
 
 async function initializeSchema(input = {}) { const config = normalize(input); if (config.engine === 'oracle') return initializeOracle(config); if (config.engine === 'sqlserver' || config.engine === 'access') return initializePortable(config); throw new Error(`محرك قاعدة البيانات غير مدعوم: ${config.engine}`); }
 
-module.exports = { testConnection, initializeSchema };
+module.exports = { testConnection, inspectOracleSchema, initializeSchema };

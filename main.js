@@ -9,6 +9,7 @@ let currentSession = null;
 function requirePermission(permission) { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); if (!currentSession.permissions.includes(permission) && !currentSession.permissions.includes('MANAGE_USERS')) throw new Error('لا تملك صلاحية تنفيذ هذه العملية.'); }
 function registerDatabaseHandlers() {
   ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.testConnection(payload); });
+  ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.inspectOracleSchema(payload); });
   ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.initializeSchema(payload); });
   ipcMain.handle('db:test', () => { requirePermission('VIEW_DASHBOARD'); return db.test(); });
   ipcMain.handle('db:dashboard', () => { requirePermission('VIEW_DASHBOARD'); return db.dashboard(); });
