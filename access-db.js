@@ -33,6 +33,28 @@ const schema = [
   `CREATE TABLE ONYX_AR_PAYMENT (PAYMENT_ID COUNTER PRIMARY KEY, COMPANY_ID LONG, BRANCH_ID LONG, FISCAL_YEAR_ID LONG, CONTACT_CODE TEXT(40), PAYMENT_TYPE TEXT(20), PAYMENT_NO TEXT(40), PAYMENT_DATE DATETIME, CASH_ACCOUNT_CODE TEXT(40), AMOUNT DOUBLE, ALLOCATED_AMOUNT DOUBLE, UNAPPLIED_AMOUNT DOUBLE, DESCRIPTION_AR TEXT(500), STATUS_CODE TEXT(20))`
 ];
 
+const chartOfAccounts = [
+  ['1000', 'الأصول', 'ASSET'], ['1100', 'الأصول المتداولة', 'ASSET'],
+  ['1101', 'الصندوق الرئيسي', 'ASSET'], ['1102', 'البنك الرئيسي', 'ASSET'],
+  ['1200', 'الذمم المدينة', 'ASSET'], ['1201', 'العملاء', 'ASSET'],
+  ['1300', 'المخزون', 'ASSET'], ['1301', 'مخزون البضائع', 'ASSET'],
+  ['1400', 'الأصول الثابتة', 'ASSET'], ['1401', 'الأثاث والتجهيزات', 'ASSET'],
+  ['1402', 'أجهزة الحاسب والمعدات', 'ASSET'], ['1490', 'مجمع الإهلاك', 'ASSET'],
+  ['2000', 'الخصوم', 'LIABILITY'], ['2100', 'الخصوم المتداولة', 'LIABILITY'],
+  ['2101', 'الموردون', 'LIABILITY'], ['2102', 'مصروفات مستحقة', 'LIABILITY'],
+  ['2200', 'الضرائب المستحقة', 'LIABILITY'], ['2201', 'ضريبة القيمة المضافة', 'LIABILITY'],
+  ['3000', 'حقوق الملكية', 'EQUITY'], ['3101', 'رأس المال', 'EQUITY'],
+  ['3201', 'الأرباح المحتجزة', 'EQUITY'], ['3301', 'صافي ربح السنة', 'EQUITY'],
+  ['4000', 'الإيرادات', 'REVENUE'], ['4101', 'إيرادات المبيعات', 'REVENUE'],
+  ['4102', 'إيرادات الخدمات', 'REVENUE'], ['4201', 'إيرادات أخرى', 'REVENUE'],
+  ['5000', 'تكلفة المبيعات والمصروفات', 'EXPENSE'], ['5101', 'تكلفة المبيعات', 'COGS'],
+  ['5102', 'تكلفة المشتريات', 'COGS'], ['5201', 'مصروف الرواتب والأجور', 'EXPENSE'],
+  ['5202', 'مصروف الإيجار', 'EXPENSE'], ['5203', 'مصروف الكهرباء والمياه', 'EXPENSE'],
+  ['5204', 'مصروف الاتصالات والإنترنت', 'EXPENSE'], ['5205', 'مصروف النقل والشحن', 'EXPENSE'],
+  ['5206', 'مصروف التسويق والإعلان', 'EXPENSE'], ['5207', 'مصروف الصيانة', 'EXPENSE'],
+  ['5208', 'مصروف الإهلاك', 'EXPENSE'], ['5299', 'مصروفات إدارية متنوعة', 'EXPENSE']
+];
+
 function dateValue(value) { return value ? new Date(String(value).slice(0, 10) + 'T12:00:00') : new Date(); }
 function today() { return new Date().toISOString().slice(0, 10); }
 function rows(result) { return Array.isArray(result) ? result : []; }
@@ -64,11 +86,13 @@ async function setup() {
       await connection.query(`INSERT INTO ONYX_BRANCH (BRANCH_ID,COMPANY_ID,BRANCH_CODE,BRANCH_NAME_AR,ACTIVE_FLAG) VALUES (1,1,'MAIN','الفرع الرئيسي',1)`);
       await connection.query(`INSERT INTO ONYX_FISCAL_YEAR (FISCAL_YEAR_ID,COMPANY_ID,FISCAL_YEAR,START_DATE,END_DATE,STATUS_CODE) VALUES (1,1,?, ?, ?, 'OPEN')`, [new Date().getFullYear(), dateValue(`${new Date().getFullYear()}-01-01`), dateValue(`${new Date().getFullYear()}-12-31`)]);
       await connection.query(`INSERT INTO ONYX_WAREHOUSE (WAREHOUSE_ID,COMPANY_ID,BRANCH_ID,WAREHOUSE_CODE,WAREHOUSE_NAME_AR,ACTIVE_FLAG) VALUES (1,1,1,'MAIN','المستودع الرئيسي',1)`);
-      const accounts = [['1101','الصندوق الرئيسي','ASSET'],['1201','العملاء','ASSET'],['1301','المخزون','ASSET'],['2101','الموردون','LIABILITY'],['2201','ضريبة القيمة المضافة','LIABILITY'],['4101','إيرادات المبيعات','REVENUE'],['5102','تكلفة المبيعات','COGS']];
-      for (const a of accounts) await connection.query('INSERT INTO ONYX_ACCOUNT (COMPANY_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG) VALUES (1,?,?,?,?,1)', a);
       await connection.query(`INSERT INTO ONYX_ROLE (ROLE_ID,ROLE_CODE,ROLE_NAME_AR,ACTIVE_FLAG) VALUES (1,'ADMIN','مدير النظام',1)`);
       await connection.query(`INSERT INTO ONYX_USER (USER_ID,USERNAME,DISPLAY_NAME_AR,PASSWORD_HASH,LANGUAGE_CODE,ACTIVE_FLAG,FAILED_ATTEMPTS) VALUES (1,'ADMIN','مدير النظام',?,'ar',1,0)`, [hashPassword('demo123')]);
       await connection.query(`INSERT INTO ONYX_USER_ROLE (USER_ID,ROLE_ID) VALUES (1,1)`);
+    }
+    for (const account of chartOfAccounts) {
+      const existing = rows(await connection.query('SELECT ACCOUNT_ID FROM ONYX_ACCOUNT WHERE COMPANY_ID=1 AND ACCOUNT_CODE=?', [account[0]]));
+      if (!existing.length) await connection.query('INSERT INTO ONYX_ACCOUNT (COMPANY_ID,ACCOUNT_CODE,ACCOUNT_NAME_AR,ACCOUNT_TYPE,OPENING_BALANCE,ACTIVE_FLAG) VALUES (1,?,?,?,?,1)', account);
     }
     initialized = true;
   } finally { await connection.close(); }
