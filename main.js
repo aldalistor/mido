@@ -18,9 +18,10 @@ function enforceCommercialLicense(feature) {
   return commercialLicense.enforceEntitlement({ license, feature, currentUsers: 1, currentBranches: 1, options: { today: new Date().toISOString().slice(0, 10), publicKey: process.env.MIDO_LICENSE_PUBLIC_KEY || null } });
 }
 function registerDatabaseHandlers() {
-  ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return db === accessDb ? accessDb.test() : dbSetup.testConnection(payload); });
-  ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return db === accessDb ? accessDb.test() : dbSetup.inspectOracleSchema(payload); });
-  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return db === accessDb ? accessDb.initialize() : dbSetup.initializeSchema(payload); });
+  // Database setup is available before login so a new local MDB can be created on first run.
+  ipcMain.handle('db:setup-test', (_event, payload = {}) => db === accessDb ? accessDb.test() : (requirePermission('MANAGE_DATABASE'), dbSetup.testConnection(payload)));
+  ipcMain.handle('db:setup-inspect', (_event, payload = {}) => db === accessDb ? accessDb.test() : (requirePermission('MANAGE_DATABASE'), dbSetup.inspectOracleSchema(payload)));
+  ipcMain.handle('db:setup-initialize', (_event, payload = {}) => db === accessDb ? accessDb.initialize() : (requirePermission('MANAGE_DATABASE'), dbSetup.initializeSchema(payload)));
   ipcMain.handle('db:test', () => db.test());
   ipcMain.handle('db:dashboard', () => { requirePermission('VIEW_DASHBOARD'); return db.dashboard(); });
   ipcMain.handle('db:accounts', (_event, payload = {}) => { requirePermission('VIEW_ACCOUNTS'); return db.accounts(payload.search || ''); });
