@@ -13,7 +13,8 @@ const oracleMigrations = [
   'oracle/migrations/012_commercial_invoice_fields.sql',
   'oracle/migrations/012_document_payment_terms.sql',
   'oracle/migrations/013_business_modules.sql',
-  'oracle/migrations/014_cash_expense_crud.sql'
+  'oracle/migrations/014_cash_expense_crud.sql',
+  'oracle/migrations/015_receivables_payables.sql'
 ];
 
 function normalize(config = {}) {
@@ -113,7 +114,7 @@ async function testConnection(input = {}) {
 
 async function initializeOracle(config) {
   const connection = await oracleConnection(config); const results = [];
-    try { for (const migration of oracleMigrations) { let applied = 0; let skipped = 0; for (const sql of statementsFromFile(migration)) { try { await connection.execute(sql); applied += 1; } catch (error) { if ([955, 1430, 2261].includes(error.errorNum)) skipped += 1; else throw new Error(`${migration}: ${error.message}`); } } results.push({ migration, applied, skipped, status: 'completed' }); } await connection.commit(); return { engine: 'oracle', initialized: true, version: '014', migrations: results }; }
+    try { for (const migration of oracleMigrations) { let applied = 0; let skipped = 0; for (const sql of statementsFromFile(migration)) { try { await connection.execute(sql); applied += 1; } catch (error) { if ([955, 1430, 2261].includes(error.errorNum)) skipped += 1; else throw new Error(`${migration}: ${error.message}`); } } results.push({ migration, applied, skipped, status: 'completed' }); } await connection.commit(); return { engine: 'oracle', initialized: true, version: '015', migrations: results }; }
   catch (error) { try { await connection.rollback(); } catch (_) {} throw error; } finally { await connection.close(); }
 }
 
