@@ -706,7 +706,7 @@ async function bootAuthentication() {
 $('bootstrap-form')?.addEventListener('submit', async event => {
   event.preventDefault();
   const errorBox = $('bootstrap-error');
-  errorBox.textContent = 'جارٍ إنشاء ملف Access والمخطط ودليل الحسابات...';
+  errorBox.textContent = 'جارٍ إنشاء قاعدة البيانات والمخطط ودليل الحسابات...';
   try {
     await window.onyxAPI.setupInitializeSchema({
       companyName: $('bootstrap-company-name').value.trim(),

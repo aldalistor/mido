@@ -14,6 +14,7 @@ const db = require('./access-db');
     if (settings.company.COMPANY_CODE !== 'TEST') throw new Error('Company settings were not seeded.');
     const session = await db.authenticate('ADMIN', 'StrongPass123!');
     if (session.company.FISCAL_YEAR !== 2026) throw new Error('Authentication context was not created.');
+    try { await db.authenticate('ADMIN', 'wrong-password'); throw new Error('Wrong password was accepted.'); } catch (error) { if (!/كلمة المرور غير صحيحة/.test(error.message)) throw error; }
     await db.updateOrganizationSettings({ companyName: 'شركة اختبار محدثة', companyCode: 'TEST2', branchName: 'فرع محدث', branchCode: 'BR2', fiscalYear: 2027, currency: 'SAR' });
     const updated = await db.organizationSettings();
     if (updated.branch.BRANCH_CODE !== 'BR2' || Number(updated.fiscalYear.FISCAL_YEAR) !== 2027) throw new Error('SQLite settings update failed.');
