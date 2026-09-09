@@ -288,4 +288,12 @@ async function listTradeDocuments(){return [];}
 async function transitionTradeDocument(){throw new Error('غير مدعوم بعد.');}
 async function close(){initialized=false;}
 
-module.exports={initialize,bootstrapStatus,test,dashboard,accounts,customers,journal,financialReports,trialBalanceReport,generalLedgerReport,incomeStatementReport,balanceSheetReport,salesPurchaseReport,inventoryValuationReport,modernAccounts,createModernAccount,modernContacts,createModernContact,modernItems,createModernItem,createModernInvoice,getInvoice,updateInvoice,voidInvoice,listInvoices,listWarehouses,listStockMovements,createTradeDocument,listTradeDocuments,transitionTradeDocument,createCashVoucher,listCashVouchers,updateCashVoucher,voidCashVoucher,createExpenseIncome,listExpenseIncome,updateExpenseIncome,voidExpenseIncome,createReceivablePayment,postReceivablePayment,listReceivablePayments,receivablesAgingReport,listFiscalPeriods,precheckFiscalPeriodClose,closeFiscalPeriod,reopenFiscalPeriod,listPeriodCloseHistory,organizationSettings,updateOrganizationSettings,authenticate,createUser,listUsers,listRoles,assignRole,listSessionContexts,setSessionContext,recordAudit,listAudit,close};
+async function resetDatabase() {
+  if (backend !== 'sqlite') throw new Error('إعادة التهيئة من الواجهة متاحة حاليًا لقاعدة SQLite فقط.');
+  await close();
+  const backupPath = `${sqlitePath}.backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  if (fs.existsSync(sqlitePath)) { fs.copyFileSync(sqlitePath, backupPath); fs.unlinkSync(sqlitePath); }
+  return { backupPath, path: sqlitePath, engine: 'sqlite', initialized: false };
+}
+
+module.exports={initialize,bootstrapStatus,test,resetDatabase,dashboard,accounts,customers,journal,financialReports,trialBalanceReport,generalLedgerReport,incomeStatementReport,balanceSheetReport,salesPurchaseReport,inventoryValuationReport,modernAccounts,createModernAccount,modernContacts,createModernContact,modernItems,createModernItem,createModernInvoice,getInvoice,updateInvoice,voidInvoice,listInvoices,listWarehouses,listStockMovements,createTradeDocument,listTradeDocuments,transitionTradeDocument,createCashVoucher,listCashVouchers,updateCashVoucher,voidCashVoucher,createExpenseIncome,listExpenseIncome,updateExpenseIncome,voidExpenseIncome,createReceivablePayment,postReceivablePayment,listReceivablePayments,receivablesAgingReport,listFiscalPeriods,precheckFiscalPeriodClose,closeFiscalPeriod,reopenFiscalPeriod,listPeriodCloseHistory,organizationSettings,updateOrganizationSettings,authenticate,createUser,listUsers,listRoles,assignRole,listSessionContexts,setSessionContext,recordAudit,listAudit,close};

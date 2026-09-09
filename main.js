@@ -34,6 +34,7 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:bootstrap-status', () => db === accessDb ? accessDb.bootstrapStatus() : ({ initialized: true }));
   ipcMain.handle('admin:organization-settings', () => { requirePermission('MANAGE_DATABASE'); return db.organizationSettings(); });
   ipcMain.handle('admin:update-organization-settings', async (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); const result = await db.updateOrganizationSettings(payload); await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'UPDATE_ORGANIZATION_SETTINGS', entityType: 'ORGANIZATION', entityId: 1, afterValue: result }); return result; });
+  ipcMain.handle('admin:reset-database', async () => { requirePermission('MANAGE_DATABASE'); const result = await db.resetDatabase(); currentSession = null; return result; });
   ipcMain.handle('db:setup-initialize', (_event, payload = {}) => db === accessDb ? accessDb.initialize(payload) : (requirePermission('MANAGE_DATABASE'), dbSetup.initializeSchema(payload)));
   ipcMain.handle('db:test', () => db.test());
   ipcMain.handle('db:dashboard', () => { requirePermission('VIEW_DASHBOARD'); return db.dashboard(); });

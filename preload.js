@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   bootstrapStatus: () => ipcRenderer.invoke('db:bootstrap-status'),
   organizationSettings: () => ipcRenderer.invoke('admin:organization-settings'),
   updateOrganizationSettings: (payload) => ipcRenderer.invoke('admin:update-organization-settings', payload),
+  resetDatabase: () => ipcRenderer.invoke('admin:reset-database'),
   dbTest: () => ipcRenderer.invoke('db:test'),
   dashboard: () => ipcRenderer.invoke('db:dashboard'),
   accounts: (search = '') => ipcRenderer.invoke('db:accounts', { search }),
