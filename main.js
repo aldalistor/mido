@@ -1,7 +1,9 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
-const db = require('./db');
+const oracleDb = require('./db');
+const accessDb = require('./access-db');
+const db = String(process.env.MIDO_DB_ENGINE || 'oracle').toLowerCase() === 'access' ? accessDb : oracleDb;
 const dbSetup = require('./db-setup');
 const sessionContext = require('./session-context');
 const commercialLicense = require('./commercial-license-core');

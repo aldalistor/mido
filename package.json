@@ -51,7 +51,10 @@
       "invoice-cycle-core.js",
       "test-stage7-inventory-invoices.js",
       "assets/**/*",
-      "performance-utils.js"
+      "performance-utils.js",
+      "access-db.js",
+      "scripts/**/*",
+      "data/**/*"
     ],
     "win": {
       "target": "nsis"
