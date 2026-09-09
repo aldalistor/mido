@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('onyxAPI', {
   modernContacts: (search = '') => ipcRenderer.invoke('db:modern-contacts', { search }),
   createContact: (payload) => ipcRenderer.invoke('db:create-contact', payload),
   modernItems: (search = '') => ipcRenderer.invoke('db:modern-items', { search }),
+  globalSearch: (search, limit = 8) => ipcRenderer.invoke('db:global-search', { search, limit }),
   createItem: (payload) => ipcRenderer.invoke('db:create-item', payload),
   createInvoice: (payload) => ipcRenderer.invoke('db:create-invoice', payload),
   transitionInvoice: (payload) => ipcRenderer.invoke('db:transition-invoice', payload),

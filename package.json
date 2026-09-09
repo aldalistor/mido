@@ -6,14 +6,15 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "test": "npm run test:syntax && npm run test:core",
+    "test": "npm run test:syntax && npm run test:core && npm run test:performance",
     "test:syntax": "node --check main.js && node --check preload.js && node --check renderer.js && node --check db.js",
     "test:core": "node test-accounting-core.js && node test-invoice-posting-core.js && node test-session-context.js && node test-document-cycle-core.js && node test-commercial-license.js && node test-commercial-invoice.js && node test-commercial-accounting.js && node test-chart-of-accounts.js && node test-business-operations-core.js && node test-stage7-inventory-invoices.js && node test-invoice-cycle-core.js && node test-receivables-core.js && node test-period-close-core.js",
     "test:commercial": "node test-commercial-license.js && node test-commercial-invoice.js && node test-commercial-accounting.js && node test-chart-of-accounts.js && node test-business-operations-core.js",
     "test:db": "node test-db.js",
     "test:journal": "node test-modern-journal.js",
     "test:invoice": "node test-invoice.js",
-    "build:win": "electron-builder --win"
+    "build:win": "electron-builder --win",
+    "test:performance": "node test-performance-utils.js"
   },
   "author": "Onyx Accounting",
   "license": "MIT",
@@ -49,7 +50,8 @@
       "period-close-core.js",
       "invoice-cycle-core.js",
       "test-stage7-inventory-invoices.js",
-      "assets/**/*"
+      "assets/**/*",
+      "performance-utils.js"
     ],
     "win": {
       "target": "nsis"
