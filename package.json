@@ -14,8 +14,10 @@
     "test:journal": "node test-modern-journal.js",
     "test:invoice": "node test-invoice.js",
     "test:sqlite": "node test-sqlite-fallback.js",
-    "doctor:win": "node scripts/doctor-win.js",
-    "build:win": "node scripts/prepare-win-native.js && electron-builder --win"
+    "test:sqlite": "node test-sqlite-fallback.js",
+    "db:template": "node scripts/create-sqlite-template.js",
+    "build:win": "npm run db:template && node scripts/prepare-win-native.js && electron-builder --win",
+    "build:win32": "npm run db:template && node scripts/prepare-win-native.js && electron-builder --win --ia32"
   },
   "author": "Onyx Accounting",
   "license": "MIT",
@@ -54,9 +56,11 @@
       "scripts/prepare-win-native.js",
       "test-stage7-inventory-invoices.js",
       "assets/**/*"
+      ,"resources/**/*"
     ],
     "extraResources": [
-      "create-mdb.ps1"
+      "create-mdb.ps1",
+      "resources/onyx-template.sqlite"
     ],
     "win": {
       "target": "nsis"

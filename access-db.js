@@ -11,7 +11,8 @@ const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roami
 const configuredPath = process.env.ONYX_DB_PATH || path.join(appData, 'Onyx Accounting', 'onyx-local.mdb');
 const accessPath = path.resolve(configuredPath);
 const sqlitePath = path.resolve(process.env.ONYX_SQLITE_PATH || configuredPath.replace(/\.(mdb|accdb)$/i, '.sqlite'));
-let backend = odbc ? 'access' : 'sqlite';
+const templatePath = process.resourcesPath ? path.join(process.resourcesPath, 'resources', 'onyx-template.sqlite') : path.join(__dirname, 'resources', 'onyx-template.sqlite');
+let backend = String(process.env.ONYX_DB_ENGINE || 'sqlite').toLowerCase() === 'access' && odbc ? 'access' : 'sqlite';
 const currentDbPath = () => backend === 'sqlite' ? sqlitePath : accessPath;
 const connectionString = () => `Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=${accessPath};`;
 let initialized = false;
@@ -139,9 +140,14 @@ function hashPassword(password) { const salt = crypto.randomBytes(16).toString('
 function verifyPassword(password, stored) { const [algorithm, iterations, salt, expected] = String(stored || '').split('$'); if (algorithm !== 'pbkdf2') return false; const actual = crypto.pbkdf2Sync(String(password), salt, Number(iterations), 32, 'sha256').toString('base64url'); return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected)); }
 
 function sqliteSchema() { return schema.map(statement => statement.replace(/COUNTER\s+PRIMARY KEY/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT').replace(/TEXT\(\d+\)/gi, 'TEXT').replace(/\bLONG\b/gi, 'INTEGER').replace(/\bBIT\b/gi, 'INTEGER').replace(/\bDATETIME\b/gi, 'TEXT').replace(/\bDOUBLE\b/gi, 'REAL').replace(/\bMEMO\b/gi, 'TEXT')); }
+function ensureSqliteFile() {
+  if (fs.existsSync(sqlitePath)) return;
+  fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
+  if (fs.existsSync(templatePath) && path.resolve(templatePath) !== sqlitePath) fs.copyFileSync(templatePath, sqlitePath);
+}
 function sqliteConnection() {
   const { DatabaseSync } = require('node:sqlite');
-  fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
+  ensureSqliteFile();
   const database = new DatabaseSync(sqlitePath);
   return {
     async query(sql, params = []) { const statement = database.prepare(sql); const values = params.map(value => value instanceof Date ? value.toISOString() : value); return /^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql) ? statement.all(...values) : (statement.run(...values), []); },
@@ -185,7 +191,7 @@ async function setup() {
   try {
     for (const statement of backend === 'sqlite' ? sqliteSchema() : schema) { try { await connection.query(statement); } catch (error) { if (!/already exists|exists|duplicate/i.test(error.message)) throw error; } }
     const company = rows(await connection.query('SELECT COMPANY_ID FROM ONYX_COMPANY WHERE COMPANY_ID=1'));
-    if (!company.length) {
+    if (!company.length && !initializationOptions.template) {
       const options = initializationOptions;
       const companyCode = options.companyCode || 'LOCAL';
       const companyName = options.companyName || 'الشركة الرئيسية';
