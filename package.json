@@ -34,6 +34,8 @@
       "renderer.js",
       "preload.js",
       "db.js",
+      "access-db.js",
+      "access-erp-repository.js",
       "db-setup.js",
       "accounting-core.js",
       "invoice-posting-core.js",
@@ -53,7 +55,12 @@
     ],
     "win": {
       "target": "nsis"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/odbc/**",
+      "node_modules/oracledb/**",
+      "node_modules/@mapbox/node-pre-gyp/**"
+    ]
   },
   "dependencies": {
     "mssql": "^12.7.0",

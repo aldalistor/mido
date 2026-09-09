@@ -1,11 +1,13 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
-const db = require('./db');
+const db = new Proxy({}, { get(_target, property) { return require('./db')[property]; } });
 const dbSetup = require('./db-setup');
 const sessionContext = require('./session-context');
 const commercialLicense = require('./commercial-license-core');
 const businessOperations = require('./business-operations-core');
+const accessDb = require('./access-db');
+const accessRepo = require('./access-erp-repository');
 
 let currentSession = null;
 function requirePermission(permission) { if (!currentSession) throw new Error('يجب تسجيل الدخول أولاً.'); const granted = (currentSession.permissions || []).map(value => String(value).toUpperCase()); if (!granted.includes(String(permission).toUpperCase()) && !granted.includes('ALL') && !granted.includes('MANAGE_USERS')) throw new Error('لا تملك صلاحية تنفيذ هذه العملية.'); }
@@ -17,10 +19,11 @@ function enforceCommercialLicense(feature) {
   return commercialLicense.enforceEntitlement({ license, feature, currentUsers: 1, currentBranches: 1, options: { today: new Date().toISOString().slice(0, 10), publicKey: process.env.MIDO_LICENSE_PUBLIC_KEY || null } });
 }
 function registerDatabaseHandlers() {
+  const accessConfig = payload => ({ filePath: payload.filePath || path.join(app.getPath('userData'), 'onyx-erp.accdb') });
   ipcMain.handle('db:setup-test', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.testConnection(payload); });
   ipcMain.handle('db:setup-inspect', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.inspectOracleSchema(payload); });
   ipcMain.handle('db:setup-initialize', (_event, payload = {}) => { requirePermission('MANAGE_DATABASE'); return dbSetup.initializeSchema(payload); });
-  ipcMain.handle('db:test', () => { requirePermission('VIEW_DASHBOARD'); return db.test(); });
+  ipcMain.handle('db:test', async () => { try { return { connected: true, ...(await db.test()) }; } catch (error) { return { connected: false, reason: error.message }; } });
   ipcMain.handle('db:dashboard', () => { requirePermission('VIEW_DASHBOARD'); return db.dashboard(); });
   ipcMain.handle('db:accounts', (_event, payload = {}) => { requirePermission('VIEW_ACCOUNTS'); return db.accounts(payload.search || ''); });
   ipcMain.handle('db:modern-accounts', (_event, payload = {}) => { requirePermission('VIEW_ACCOUNTS'); return db.modernAccounts(payload.search || ''); });
@@ -71,11 +74,34 @@ function registerDatabaseHandlers() {
   ipcMain.handle('auth:login', async (_event, payload = {}) => { currentSession = await db.authenticate(payload.username, payload.password, { languageCode: 'ar', terminal: 'Electron' }); return currentSession; });
   ipcMain.handle('auth:logout', async () => { if (currentSession) { await db.recordAudit({ ...(currentSession.context || {}), userId: currentSession.userId, actionCode: 'LOGOUT', entityType: 'SESSION', entityId: currentSession.userId }); } currentSession = null; return true; });
   ipcMain.handle('admin:list-audit', (_event, payload = {}) => { requirePermission('VIEW_AUDIT_LOG'); return db.listAudit({ ...(currentSession.context || {}), ...payload }); });
-  ipcMain.handle('admin:has-users', async () => (await db.listUsers()).length > 0);
+  ipcMain.handle('admin:has-users', async () => { try { return (await db.listUsers()).length > 0; } catch (_) { return false; } });
   ipcMain.handle('admin:list-users', () => { requirePermission('MANAGE_USERS'); return db.listUsers(); });
   ipcMain.handle('admin:list-roles', () => { requirePermission('MANAGE_ROLES'); return db.listRoles(); });
   ipcMain.handle('admin:create-user', async (_event, payload = {}) => { const users = await db.listUsers(); if (users.length > 0) requirePermission('MANAGE_USERS'); const user = await db.createUser({ ...payload, actorUserId: currentSession?.userId }); if (users.length === 0) await db.assignRole(user.userId, 'ADMIN'); return user; });
   ipcMain.handle('admin:assign-role', (_event, payload = {}) => { requirePermission('MANAGE_USERS'); return db.assignRole(payload.userId, payload.roleCode, currentSession.userId); });
+  ipcMain.handle('access:test', (_event, payload = {}) => accessDb.test(payload));
+  ipcMain.handle('access:initialize', (_event, payload = {}) => accessDb.initialize(payload));
+  ipcMain.handle('access:backup', (_event, payload = {}) => accessDb.backup(payload, payload.destination));
+  ipcMain.handle('access:status', () => { const filePath = path.join(app.getPath('userData'), 'onyx-erp.accdb'); return { configured: require('fs').existsSync(filePath), filePath }; });
+  ipcMain.handle('access:provision', async (_event, payload = {}) => { const filePath = payload.filePath || path.join(app.getPath('userData'), 'onyx-erp.accdb'); return accessDb.initialize({ ...payload, filePath }); });
+  ipcMain.handle('access:list', (_event, payload = {}) => accessRepo.list(accessConfig(payload), payload.entity, payload.search));
+  ipcMain.handle('access:create-account', (_event, payload = {}) => accessRepo.createAccount(accessConfig(payload), payload));
+  ipcMain.handle('access:update-account', (_event, payload = {}) => accessRepo.updateAccount(accessConfig(payload), payload));
+  ipcMain.handle('access:delete-account', (_event, payload = {}) => accessRepo.deleteAccount(accessConfig(payload), payload));
+  ipcMain.handle('access:create-contact', (_event, payload = {}) => accessRepo.createContact(accessConfig(payload), payload));
+  ipcMain.handle('access:update-contact', (_event, payload = {}) => accessRepo.updateContact(accessConfig(payload), payload));
+  ipcMain.handle('access:delete-contact', (_event, payload = {}) => accessRepo.deleteContact(accessConfig(payload), payload));
+  ipcMain.handle('access:create-item', (_event, payload = {}) => accessRepo.createItem(accessConfig(payload), payload));
+  ipcMain.handle('access:update-item', (_event, payload = {}) => accessRepo.updateItem(accessConfig(payload), payload));
+  ipcMain.handle('access:delete-item', (_event, payload = {}) => accessRepo.deleteItem(accessConfig(payload), payload));
+  ipcMain.handle('access:create-invoice', (_event, payload = {}) => accessRepo.createInvoice(accessConfig(payload), payload));
+  ipcMain.handle('access:post-invoice', (_event, payload = {}) => accessRepo.postInvoice(accessConfig(payload), payload));
+  ipcMain.handle('access:void-invoice', (_event, payload = {}) => accessRepo.voidInvoice(accessConfig(payload), payload));
+  ipcMain.handle('access:create-journal', (_event, payload = {}) => accessRepo.createJournal(accessConfig(payload), payload));
+  ipcMain.handle('access:update-setting', (_event, payload = {}) => accessRepo.updateSetting(accessConfig(payload), payload));
+  ipcMain.handle('access:update-company', (_event, payload = {}) => accessRepo.updateCompany(accessConfig(payload), payload));
+  ipcMain.handle('access:update-branch', (_event, payload = {}) => accessRepo.updateBranch(accessConfig(payload), payload));
+  ipcMain.handle('access:update-fiscal-year', (_event, payload = {}) => accessRepo.updateFiscalYear(accessConfig(payload), payload));
 }
 function createWindow() {
   const window = new BrowserWindow({ width: 1440, height: 920, minWidth: 1120, minHeight: 720, backgroundColor: '#f6f8fb', title: 'أونكس المحاسبي', webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') } });
